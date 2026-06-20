@@ -1,0 +1,47 @@
+{
+  "_meta": "the-bible CORE — verified multi-version scripture corpus (the ABSOLUTE axiom).",
+  "versions": [
+    {
+      "id": "kjv",
+      "label": "King James Version (1769)",
+      "license": "Public Domain",
+      "canon": "Protestant 66",
+      "verses": 31102
+    },
+    {
+      "id": "web",
+      "label": "World English Bible",
+      "license": "Public Domain",
+      "canon": "Protestant 66 (modern)",
+      "verses": 31095
+    },
+    {
+      "id": "asv",
+      "label": "American Standard Version (1901)",
+      "license": "Public Domain",
+      "canon": "Protestant 66",
+      "verses": 31086
+    },
+    {
+      "id": "ylt",
+      "label": "Young's Literal Translation (1898)",
+      "license": "Public Domain",
+      "canon": "Protestant 66",
+      "verses": 31102
+    },
+    {
+      "id": "douayrheims",
+      "label": "Douay-Rheims (1899, American Ed.)",
+      "license": "Public Domain",
+      "canon": "Catholic (제2경전 포함)",
+      "verses": 35805
+    },
+    {
+      "id": "kjva",
+      "label": "KJV with Apocrypha (1769)",
+      "license": "Public Domain",
+      "canon": "Protestant + Apocrypha 80",
+      "verses": 36819
+    }
+  ]
+}
