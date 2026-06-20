@@ -37,7 +37,7 @@
 - **L3 인간 감사 앵커**: FLAGGED/borderline → 인간 리뷰. *자동 판사도 fool 가능*(R3 실증) → 환원불가 천장은 인간.
 
 ## 명명된 잔여 (정직 — 닫은 척 안 함)
-**chat-path 미배선**(앱 모드=prose-enforced·티어 의존, 게이트는 reference+배터리; 기계강제 래퍼는 `core/gate_runtime.py`/`gate_cli.py`로 제공, 마운트 안 한 순수 chat만 prose) · application-harm(theology-laundering) · L2 자체 불완전(R3 P3 miss) · 위기탐지=2-tier(OVERRIDE/CHECKIN)+INPUT hook+locale이나 패턴 무한-evadable(천장=hook·L3) · L2 injection 하든됐으나 라이브 red-team 미실시 · privacy("무흔적" 약속 금지) · 신학적 정합성/성례성=권위·전통 영역(판정 안 함). 상세: `DESIGN.md §5`.
+**chat-path 미배선**(앱 모드=prose-enforced·티어 의존, 게이트는 reference+배터리; 기계강제 래퍼는 `core/gate_runtime.py`/`gate_cli.py`로 제공, 마운트 안 한 순수 chat만 prose) · application-harm(theology-laundering) · L2 자체 불완전(R3 P3 miss) · 위기탐지=2-tier(OVERRIDE/CHECKIN)+INPUT hook+locale이나 패턴 무한-evadable(천장=hook·L3) · L2 injection 하든+라이브 검증(claude-haiku, injection→FLAG) · privacy("무흔적" 약속 금지) · 신학적 정합성/성례성=권위·전통 영역(판정 안 함). 상세: `DESIGN.md §5`.
 
 ## 원칙 (한 줄)
 **어느 자동 계층도 단독으로 완전하지 않다** — 겹쳐 막고, 못 닫는 것은 *명명*하며, 환원불가 지점엔 *인간을 앵커*로. (FH judge-robustness 척추와 동형.)
