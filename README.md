@@ -56,3 +56,9 @@ GATE=v4 python3 core/battery3.py   # R3 (실 LLM Guardian — L2)
 
 ## 라이선스
 코드: `LICENSE`(MIT). 성구 데이터(`core/scripture/*.json`)=6개 공개도메인 버전(KJV·WEB·ASV·YLT·Douay-Rheims·KJVA), **모두 public domain**, 출처 getbible.net v2(`_index.json`에 버전별 라이선스·정경 범위 기록). `core/scripture_db.json`은 mock fallback. 자세한 설계·하든 이력: `DESIGN.md` · 페르소나: `core/personas.json`.
+
+---
+
+## Built with forge-harness
+
+the-bible은 [forge-harness](https://github.com/chrono-meta/forge-harness) — *거버닝되는 AI 개발을 위한 메타-하네스* — 를 통해 설계·단련되었습니다. 안전 구조(fail-closed grounding · 3층 겹침 · 명명된 잔여 · 적대 배터리)와 페르소나 티어링은 FH의 게이트 규율(steel-quench 적대 리뷰 · relay-not-generator 구속 · honest-residual 명명)을 거쳐 나왔습니다. 화려한 기능이 아니라 *거버넌스가 자산을 따라 이동한다*는 FH의 명제를 보여주는 하나의 작동 예시입니다.
