@@ -40,7 +40,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Import the existing gate engines — do NOT reimplement them.
-from grounding_gate import gate as _gate_l1  # noqa: E402
+from grounding_gate import gate as _gate_l1, _has_korean  # noqa: E402
 
 try:
     from grounding_gate_v3 import gate as _gate_v3  # noqa: E402
@@ -115,7 +115,8 @@ def run_turn(user_input, candidate_output, citations=None, *, engine="auto", l2=
             result = {
                 "verdict": "FLAGGED",
                 "output": sem.get("msg") or sem.get("output")
-                or "의도 검토 필요 (인간 감사).",
+                or ("의도 검토 필요 (인간 감사)." if _has_korean(user_input)
+                    else "intent needs review (human audit)."),
                 "engine": engine_name,
                 "l2": sem,
                 "note": "L2 semantic hook (JUDGED — anchor with L3 human audit)",
@@ -168,8 +169,10 @@ def _demo():
 
     # Optional L2 demo: a trivial caller-supplied hook that flags one phrase.
     def _example_l2(user_input, candidate_output):
-        if "투자 확신" in candidate_output:
-            return {"msg": "성구를 투자 확신의 근거로 쓸 수 없습니다. (L2 → 인간 감사)"}
+        if "투자 확신" in candidate_output or "investment conviction" in candidate_output:
+            return {"msg": ("성구를 투자 확신의 근거로 쓸 수 없습니다. (L2 → 인간 감사)"
+                            if _has_korean(user_input)
+                            else "Scripture cannot ground an investment conviction. (L2 → human audit)")}
         return None
 
     r = run_turn(

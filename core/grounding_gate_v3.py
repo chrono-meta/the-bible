@@ -25,7 +25,7 @@ import sys
 sys.path.insert(0, os.path.dirname(__file__))
 from grounding_gate import (  # noqa: E402
     scripture_grounded, CRISIS_RESPONSE, crisis_response, crisis_checkin,
-    CRISIS_CHECKIN_PATTERNS, CRISIS_IDEATION, semantic_distress_check,
+    CRISIS_CHECKIN_PATTERNS, CRISIS_IDEATION, semantic_distress_check, _has_korean,
 )
 from grounding_gate_v2 import (  # noqa: E402
     SELF_HARM, HARM_OTHERS, CONFIDENTIAL_REQ, CONFIDENTIAL_LEAK,
@@ -76,50 +76,68 @@ def _audit(reason, user_input, output):
 
 
 def gate(user_input: str, candidate_output: str, citations: list, locale=None) -> dict:
+    # Answer in the language of the person (English base, Korean compatible). locale wins when given.
+    ko = (locale or "").strip().lower() == "kr" or (not locale and _has_korean(user_input))
     # L1 SAFETY (normalized, obfuscation-resistant)
     # Tier 1 — HIGH-CONFIDENCE self-harm (also fires if a wired semantic INPUT hook returns True).
     sem_in = semantic_distress_check(user_input)
     if _match(SELF_HARM_3, user_input) or sem_in is True:
-        return {"verdict": "CRISIS_OVERRIDE", "output": crisis_response(locale),
+        return {"verdict": "CRISIS_OVERRIDE", "output": crisis_response(locale, user_input=user_input),
                 "actions": ["escalate_to_human", "preserve_record"],
                 "note": "self-harm (normalized)" + ("; semantic-input-hook" if sem_in is True and not _match(SELF_HARM_3, user_input) else "")}
     # Tier 2 — LOW-THRESHOLD oblique distress -> GENTLE check-in (not blank comfort). Over-triggers.
     if _match(CHECKIN_3, user_input):
-        return {"verdict": "CRISIS_CHECKIN", "output": crisis_checkin(locale),
+        return {"verdict": "CRISIS_CHECKIN", "output": crisis_checkin(locale, user_input=user_input),
                 "actions": ["gentle_checkin", "offer_resource"],
                 "note": "oblique distress (hopelessness/anhedonia/worthlessness/burden) — softer than Tier-1"}
     if _match(HARM_OTHERS_3, user_input):
         return {"verdict": "CRISIS_OVERRIDE",
-                "output": "누군가를 해하려는 길로는 함께 갈 수 없습니다. 안전을 먼저 살피세요.",
+                "output": "누군가를 해하려는 길로는 함께 갈 수 없습니다. 안전을 먼저 살피세요." if ko
+                          else "I cannot walk a path that sets out to harm someone. Tend to safety first.",
                 "actions": ["de-escalate", "no_endorsement"], "note": "harm-to-others"}
     # L1 CONFIDENTIALITY
     if _match(CONFIDENTIAL_REQ_3, user_input) or _match(CONFIDENTIAL_LEAK, candidate_output):
-        return {"verdict": "REFUSED", "output": "다른 분이 나눈 내용은 전하지 않습니다. (격리·비공유)",
+        return {"verdict": "REFUSED",
+                "output": "다른 분이 나눈 내용은 전하지 않습니다. (격리·비공유)" if ko
+                          else "I do not pass on what another person shared. (isolated · not shared)",
                 "note": "confidentiality (incl. aggregation)"}
     # L1 ABSOLUTION (incl. paraphrase)
     if _match(ABSOLUTION_3, candidate_output):
-        return {"verdict": "REFUSED", "output": "이 매개는 죄를 사할 수 없습니다. 말씀 앞에 함께 머물 뿐입니다.",
+        return {"verdict": "REFUSED",
+                "output": "이 매개는 죄를 사할 수 없습니다. 말씀 앞에 함께 머물 뿐입니다." if ko
+                          else "This medium cannot absolve sin. It only abides with you before the word.",
                 "note": "absolution (incl. paraphrase)"}
     # L1 SCOPE
     if _match(OUT_OF_SCOPE, candidate_output):
-        return {"verdict": "REDIRECTED", "output": "법률·의료·재무는 제 영역이 아닙니다. 전문가에게.",
+        return {"verdict": "REDIRECTED",
+                "output": "법률·의료·재무는 제 영역이 아닙니다. 전문가에게." if ko
+                          else "Legal, medical, and financial matters are not my domain. Please see a professional.",
                 "note": "out-of-scope"}
     # L1 NO-ADJUDICATION
     if _match(ADJUDICATION, candidate_output):
-        return {"verdict": "REDIRECTED", "output": "교파 우열을 판정하지 않습니다.", "note": "doctrinal adjudication"}
+        return {"verdict": "REDIRECTED",
+                "output": "교파 우열을 판정하지 않습니다." if ko
+                          else "I do not adjudicate which tradition is superior.",
+                "note": "doctrinal adjudication"}
     # L1 APPLICATION-HARM heuristic -> FLAG + L3 audit (PARTIAL — not a solve)
     if _match(RISKY_ACTION_3, candidate_output):
         _audit("application-harm", user_input, candidate_output)
-        return {"verdict": "FLAGGED", "output": "성구를 위험한 행동의 정당화로 적용할 수 없습니다. (인간 감사 회부)",
+        return {"verdict": "FLAGGED",
+                "output": "성구를 위험한 행동의 정당화로 적용할 수 없습니다. (인간 감사 회부)" if ko
+                          else "Scripture cannot be applied to justify a dangerous action. (referred to human audit)",
                 "note": "application-harm — PARTIAL, routed to L3 human audit"}
     # L2 SEMANTIC HOOK (LLM-Guardian) — stub; in deployment catches paraphrase/intent + routes to L3
     sem = semantic_intent_check(user_input, candidate_output)
     if sem:
         _audit("semantic-intent", user_input, candidate_output)
-        return {"verdict": "FLAGGED", "output": sem.get("msg", "의도 검토 필요 (인간 감사)"), "note": "semantic L2"}
+        return {"verdict": "FLAGGED",
+                "output": sem.get("msg", "의도 검토 필요 (인간 감사)" if ko else "intent needs review (human audit)"),
+                "note": "semantic L2"}
     # L1 GROUNDING fail-closed
     ungrounded = [ref for (q, ref) in citations if not scripture_grounded(q, ref)]
     if ungrounded:
-        return {"verdict": "FAIL_CLOSED", "output": "(검증 성구 없음 — 인용 중단, 임의생성 안 함)",
+        return {"verdict": "FAIL_CLOSED",
+                "output": "(검증 성구 없음 — 인용 중단, 임의생성 안 함)" if ko
+                          else "(No verified scripture — quotation halted, nothing fabricated.)",
                 "ungrounded": ungrounded, "note": "no fabrication"}
     return {"verdict": "PASS", "output": candidate_output}

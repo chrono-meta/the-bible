@@ -119,59 +119,79 @@ _CRISIS_RESOURCES = {
 }
 
 
-def crisis_response(locale=None) -> str:
-    """Locale-appropriate crisis resource. The original bug: 109 was hardcoded, so a non-Korea
-    user got a wrong/unreachable number. Now:
-      - locale='kr'                 -> Korean body + Korean lines (109/1577-0199).
-      - a KNOWN non-kr locale       -> English body + that country's line (e.g. 'us' -> 988).
-      - an UNKNOWN/unsupported code  -> INTERNATIONAL fallback ONLY (NO 109, no wrong number).
-      - locale=None (no locale given) -> this tool's primary audience is Korean, so Korean
-                                         body + Korean lines + the international fallback
-                                         appended (a non-Korea user still gets a reachable path).
-    The key distinction: an *unknown* locale must never surface Korea's 109 — that reintroduces
-    the original bug; locale=None means 'caller gave us nothing', which is different from
-    'caller gave us a place we don't have a line for'."""
+def _has_korean(text) -> bool:
+    """True if the text contains Hangul. Used to answer a crisis in the language it was spoken in —
+    the tool's base is English (international), with Korean kept fully compatible."""
+    return bool(re.search(r"[가-힣]", text or ""))
+
+
+# Crisis response bodies, one per language. The {res} placeholder receives the locale resource line.
+_CRISIS_BODY = {
+    "ko": (
+        "지금 많이 힘드신 것 같습니다. 이건 혼자 감당할 일이 아니고, 지금 바로 사람에게 닿아야 합니다.\n"
+        "{res}\n"
+        "(이 매개는 위기를 대신 감당할 수 없습니다 — 사람에게 연결하는 것이 먼저입니다.)"
+    ),
+    "en": (
+        "It sounds like you are carrying a great deal right now. This is not something to face alone —\n"
+        "please reach a person now.\n"
+        "{res}\n"
+        "(This medium cannot carry a crisis for you — connecting you to a person comes first.)"
+    ),
+}
+
+
+def crisis_response(locale=None, user_input=None) -> str:
+    """Locale-appropriate crisis resource, answered in the language of the person in crisis.
+    English (international) is the base; Korean stays fully compatible. Precedence:
+      - locale='kr'                  -> Korean body + Korean lines (109/1577-0199).
+      - a KNOWN non-kr locale        -> English body + that country's line (e.g. 'us' -> 988).
+      - an UNKNOWN/'international' code -> INTERNATIONAL fallback ONLY (no wrong hardcoded number).
+      - no locale given              -> infer from the INPUT language: a Korean input gets the
+                                         Korean body + Korean lines + international fallback;
+                                         any other input gets the English body + international
+                                         fallback.
+    The key safety distinction: an *unknown* locale must never surface a wrong hardcoded number."""
     key = (locale or "").strip().lower()
     if key == "kr":
-        return (
-            "지금 많이 힘드신 것 같습니다. 이건 혼자 감당할 일이 아니고, 지금 바로 사람에게 닿아야 합니다.\n"
-            f"{_CRISIS_RESOURCES['kr']}\n"
-            "(이 매개는 위기를 대신 감당할 수 없습니다 — 사람에게 연결하는 것이 먼저입니다.)"
-        )
+        return _CRISIS_BODY["ko"].format(res=_CRISIS_RESOURCES["kr"])
     if key and key in _CRISIS_RESOURCES and key != "international":
-        return (
-            "It sounds like you are carrying a great deal right now. This is not something to face alone —\n"
-            "please reach a person now.\n"
-            f"{_CRISIS_RESOURCES[key]}\n"
-            "(This medium cannot carry a crisis for you — connecting you to a person comes first.)"
-        )
+        return _CRISIS_BODY["en"].format(res=_CRISIS_RESOURCES[key])
     if key:  # a code was given but we don't have a line for it (incl. explicit 'international').
-        # INTERNATIONAL ONLY — never a wrong hardcoded number.
-        return (
-            "It sounds like you are carrying a great deal right now. Please reach a person now.\n"
-            f"{_CRISIS_RESOURCES['international']}\n"
-            "(This medium cannot carry a crisis for you — connecting you to a person comes first.)"
+        return _CRISIS_BODY["en"].format(res=_CRISIS_RESOURCES["international"])
+    # No locale: answer in the language of the input. Korean input -> Korean; otherwise English.
+    if _has_korean(user_input):
+        return _CRISIS_BODY["ko"].format(
+            res=f"{_CRISIS_RESOURCES['kr']}\n{_CRISIS_RESOURCES['international']}"
         )
-    # locale=None (nothing provided): Korean primary (default audience) + international fallback.
-    return (
-        "지금 많이 힘드신 것 같습니다. 이건 혼자 감당할 일이 아니고, 지금 바로 사람에게 닿아야 합니다.\n"
-        f"{_CRISIS_RESOURCES['kr']}\n"
-        f"{_CRISIS_RESOURCES['international']}\n"
-        "(이 매개는 위기를 대신 감당할 수 없습니다 — 사람에게 연결하는 것이 먼저입니다.)"
-    )
+    return _CRISIS_BODY["en"].format(res=_CRISIS_RESOURCES["international"])
 
 
-# Backward-compatible default response (used by v2/v3 imports). Now locale-aware under the hood.
+# Backward-compatible default response (used by v2/v3 imports). English/international base — no
+# input context at module load, so it falls to the English body.
 CRISIS_RESPONSE = crisis_response()
 
 # Gentle check-in body for TIER-2 oblique distress — NOT a hard crisis escalation, but NOT
-# blank comfort either: it names the feeling, asks directly, and surfaces a resource.
-def crisis_checkin(locale=None) -> str:
-    res = _CRISIS_RESOURCES.get((locale or "").strip().lower(), _CRISIS_RESOURCES["international"])
+# blank comfort either: it names the feeling, asks directly, and surfaces a resource. Same
+# input-language rule as crisis_response (English base, Korean compatible).
+def crisis_checkin(locale=None, user_input=None) -> str:
+    key = (locale or "").strip().lower()
+    speak_ko = (key == "kr") or (not key and _has_korean(user_input))
+    if not key:
+        res = _CRISIS_RESOURCES["kr"] if speak_ko else _CRISIS_RESOURCES["international"]
+    else:
+        res = _CRISIS_RESOURCES.get(key, _CRISIS_RESOURCES["international"])
+    if speak_ko:
+        return (
+            "마음이 많이 가라앉아 있는 것처럼 들립니다. 혹시 지금 안전하신가요? 괜찮지 않다면 혼자 두지 않겠습니다.\n"
+            f"{res}\n"
+            "(힘든 마음을 가볍게 흘려보내지 않으려 여쭙니다 — 언제든 사람에게 닿으셔도 됩니다.)"
+        )
     return (
-        "마음이 많이 가라앉아 있는 것처럼 들립니다. 혹시 지금 안전하신가요? 괜찮지 않다면 혼자 두지 않겠습니다.\n"
+        "It sounds like your heart is weighed down right now. Are you safe at the moment? If you are\n"
+        "not okay, I will not leave you alone with it.\n"
         f"{res}\n"
-        "(힘든 마음을 가볍게 흘려보내지 않으려 여쭙니다 — 언제든 사람에게 닿으셔도 됩니다.)"
+        "(I ask so as not to wave a heavy heart away — you may reach a person at any time.)"
     )
 
 
@@ -250,14 +270,14 @@ def scripture_grounded(quote: str, ref: str) -> bool:
 def gate(user_input: str, candidate_output: str, citations: list, locale=None) -> dict:
     """citations: list of (quote, ref) tuples the candidate_output relies on.
     locale: optional ISO-ish locale ('kr','us','gb', ...) for the crisis resource; None ->
-    safe default (Korean primary + international fallback)."""
+    answer in the input's language (English base, Korean compatible)."""
     # (2a) CRISIS-OVERRIDE — HIGH-CONFIDENCE (Tier 1). Highest precedence; overrides comfort +
     #      no-trace destruction. Also fires if a wired semantic INPUT hook returns True.
     sem = semantic_distress_check(user_input)
     if detect_crisis(user_input) or sem is True:
         return {
             "verdict": "CRISIS_OVERRIDE",
-            "output": crisis_response(locale),
+            "output": crisis_response(locale, user_input=user_input),
             "actions": ["escalate_to_human", "preserve_record (override Vault destruction)"],
             "note": "safety > comfort; 'total acceptance' architecture suspended"
                     + ("; semantic-input-hook" if sem is True and not detect_crisis(user_input) else ""),
@@ -268,7 +288,7 @@ def gate(user_input: str, candidate_output: str, citations: list, locale=None) -
     if detect_checkin(user_input):
         return {
             "verdict": "CRISIS_CHECKIN",
-            "output": crisis_checkin(locale),
+            "output": crisis_checkin(locale, user_input=user_input),
             "actions": ["gentle_checkin", "offer_resource", "do_not_paper_over_with_comfort"],
             "note": "low-confidence oblique distress; softer than Tier-1, still NOT blank comfort",
         }
@@ -277,7 +297,11 @@ def gate(user_input: str, candidate_output: str, citations: list, locale=None) -
     if ungrounded:
         return {
             "verdict": "FAIL_CLOSED",
-            "output": "(검증된 성구를 찾지 못해 성구 인용을 중단합니다. 임의 생성하지 않습니다.)",
+            "output": (
+                "(검증된 성구를 찾지 못해 성구 인용을 중단합니다. 임의 생성하지 않습니다.)"
+                if _has_korean(user_input)
+                else "(No verified scripture match found — halting the quotation. Nothing is fabricated.)"
+            ),
             "ungrounded": ungrounded,
             "note": "AI may not emit scripture absent a verified-DB match; no fabrication",
         }

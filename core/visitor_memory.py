@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """
-visitor_memory.py — the-bible 방문자 기억 (자연스러운 작별 → 저장 → 다음 방문 환대).
+visitor_memory.py — the-bible visitor memory (natural farewell -> save -> welcome on return).
 
-세션을 "세션 마감하자" 같은 기계어로 끝내지 않는다. 사람이 "이만 가볼게요"처럼
-*자연스럽게* 작별하면 알아서 묵상의 흔적을 저장하고, 다음에 오면 그를 기억하고 맞이한다.
+A session does not end with a machine command like "end the session." When a person says goodbye
+*naturally* ("I'll head off now"), it saves the traces of the reflection on its own, then remembers
+and welcomes them on the next visit.
 
-저장 내용 = 묵상 맥락만 (이름은 사용자가 준 호칭, 다룬 주제/구절). 민감내용 강요 없음.
-privacy: DESIGN의 "무흔적 약속 금지" 원칙 — 로컬 파일 평문 저장임을 정직히 고지(README).
-store: core/visitors.json (gitignored 권장 — 개인 묵상 기록).
+What is saved = reflection context only (the name is whatever the user offered, plus the topics/verses
+covered). No sensitive content is demanded.
+privacy: per DESIGN's "no 'no-trace' promise" principle — honestly disclose that this is local
+plaintext storage (README).
+store: core/visitors.json (gitignored recommended — a personal reflection record).
 """
 import json
 import os
@@ -16,7 +19,14 @@ import datetime
 
 STORE = os.path.join(os.path.dirname(__file__), "visitors.json")
 
-# 자연스러운 작별 신호 — "세션 마감" 같은 기계어 대신.
+
+def _has_korean(text) -> bool:
+    """True if the text contains Hangul — used to greet a returning visitor in their language
+    (English base, Korean compatible)."""
+    return bool(re.search(r"[가-힣]", text or ""))
+
+
+# Natural farewell signals — instead of a machine command like "end session". Bilingual.
 FAREWELL_PATTERNS = [
     r"이만\s*(가|갈|가볼|일어날)", r"그만\s*(할|할게|하겠)", r"다음에\s*(봐|뵈|또)",
     r"오늘은\s*여기(까지|서)", r"가\s*볼게", r"잘\s*있어", r"이제\s*가",
@@ -43,7 +53,7 @@ def _save(data: dict) -> None:
 
 
 def remember(visitor: str, reflections=None, note: str = "") -> dict:
-    """작별 시 호출 — 방문자의 묵상 흔적을 저장/갱신."""
+    """Called at farewell — save/update the visitor's reflection traces."""
     data = _load()
     today = datetime.date.today().isoformat()
     v = data.get(visitor) or {"first_seen": today, "visits": 0, "reflections": []}
@@ -60,27 +70,36 @@ def remember(visitor: str, reflections=None, note: str = "") -> dict:
 
 
 def recall(visitor: str):
-    """세션 시작 시 호출 — 돌아온 방문자면 기억을 돌려준다(없으면 None)."""
+    """Called at session start — return the memory if this is a returning visitor (else None)."""
     return _load().get(visitor)
 
 
 def greeting_for(visitor: str):
-    """돌아온 방문자용 환대 한 줄 (없으면 None → 신규 환영 사용)."""
+    """A one-line welcome for a returning visitor (None -> use the new-visitor welcome). Greets in
+    the visitor's language: Korean if the name/reflections are Korean, otherwise English."""
     v = recall(visitor)
     if not v:
         return None
     last = v.get("last_seen", "")
-    recent = ", ".join(v.get("reflections", [])[-2:]) or "지난 묵상"
-    return (f"✝  다시 평안이 함께하기를, {visitor}. 지난번({last})엔 «{recent}»을(를) 함께 두었지요. "
-            f"오늘은 무엇을 가지고 오셨나요?")
+    refs = v.get("reflections", [])[-2:]
+    if _has_korean(visitor) or any(_has_korean(r) for r in refs):
+        recent = ", ".join(refs) or "지난 묵상"
+        return (f"✝  다시 평안이 함께하기를, {visitor}. 지난번({last})엔 «{recent}»을(를) 함께 두었지요. "
+                f"오늘은 무엇을 가지고 오셨나요?")
+    recent = ", ".join(refs) or "your last reflection"
+    return (f"✝  Peace be with you again, {visitor}. Last time ({last}) we rested on «{recent}» "
+            f"together. What have you brought today?")
 
 
 if __name__ == "__main__":
-    # 데모: 작별 감지 → 저장 → 재방문 환대
-    print("작별 감지:", is_farewell("오늘은 여기까지 할게요, 다음에 봐요"))
-    print("작별 아님:", is_farewell("요한복음 한 구절 보고 싶어요"))
+    # demo: farewell detection -> save -> return-welcome (exercises both language paths)
+    print("farewell (en):", is_farewell("that's all for today, see you"))
+    print("farewell (ko):", is_farewell("오늘은 여기까지 할게요, 다음에 봐요"))
+    print("not farewell :", is_farewell("I'd like to look at a verse from John"))
+    remember("friend", reflections=["John 3:16", "burnout and rest"], note="guilt over postponing a refactor")
     remember("벗", reflections=["요한복음 3:16", "번아웃과 안식"], note="리팩토링 미루는 죄책감")
-    print("재방문 환대:", greeting_for("벗"))
-    # 데모 흔적 정리
+    print("return-welcome (en):", greeting_for("friend"))
+    print("return-welcome (ko):", greeting_for("벗"))
+    # clean up demo traces
     if os.path.exists(STORE):
         os.remove(STORE)

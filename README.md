@@ -1,65 +1,111 @@
 # The Bible
 
-검증된 성서(구약/신약)를 **절대 기준**으로 삼아, 그 말씀을 **순수하게 매개**하는 묵상(reflection) 도구.
-AI는 진리를 *생성*하지 않고, 절대재인 성서를 *relay*하는 매개체일 뿐입니다.
+A reflection tool that takes the canonical Scriptures (Old/New Testament) as its **absolute standard**
+and **purely relays** that word. The AI does not *generate* truth — it is only a medium that *relays*
+the Scripture, which it treats as the absolute reference.
 
-> ## ⚠️ 먼저 읽어주세요 (Safety)
-> - 이것은 **고해성사가 아니며, 사죄(absolution)를 베풀지 않습니다.** 성직자·성례를 대체하지 않습니다.
-> - **위기 상황의 상담 서비스가 아닙니다.** 자해·위기 징후가 있다면 지금 사람에게 닿으세요 —
->   자살예방상담 **109**(24시간) · 정신건강위기상담 **1577-0199**. (지역에 맞게 교체하세요.)
-> - 안전이 위안보다 우선하도록 설계되었지만, **어떤 자동 계층도 단독으로 완전하지 않습니다**(아래 잔여 참조).
+> ## ⚠️ Please read first (Safety)
+> - This is **not confession, and it grants no absolution.** It does not replace clergy or the sacraments.
+> - **It is not a crisis counseling service.** If you are showing signs of self-harm or crisis, reach a
+>   person right now — suicide-prevention hotline **109** (24h) · mental-health crisis line **1577-0199**
+>   (Korea examples — replace with the hotlines for your region).
+> - It is designed so that safety takes precedence over comfort, but **no automated layer is complete on
+>   its own** (see Named Residuals below).
 
-## 정체성
-- **성서 = 절대 axiom**: 시스템은 성서 자체의 진위를 *검증하지 않습니다*(그건 신앙·전통의 몫). 다만 **AI의 출력**이 검증된 성서를 벗어나지 못하게 *구속*합니다.
-- **순수 매개**: 검증된 성구 + 정전 주석만 relay. 자유로운 교리 생성·해석을 최소화.
+## Identity
+- **Scripture = absolute axiom**: the system does *not* verify the truth of Scripture itself (that belongs
+  to faith and tradition). It only *constrains* **the AI's output** so it cannot stray beyond the canonical
+  Scriptures.
+- **Pure relay**: it relays only verified verses and canonical commentary. Free doctrinal generation and
+  interpretation are minimized.
 
-## 안전 아키텍처 (3-층)
-어느 한 층도 완전하지 않기에 *겹쳐서* 막습니다.
-1. **L1 — 기계 floor** (`core/grounding_gate*.py`): 위기 override · 성구 grounding **fail-closed**(검증 DB 정확매칭만, 조작/오인용 차단) · 사죄주장·영역이탈(법률/의료/재무)·교리판정·타인정보·타인가해 차단. 정규화로 난독 회피 무력화.
-2. **L2 — 의미 판단 (LLM Guardian)** (`core/grounding_gate_v4.py`): 정규식이 못 잡는 패러프레이즈/의도를 LLM이 *의미*로 분류해 FLAG.
-3. **L3 — 인간 감사 앵커**: FLAGGED/borderline은 privacy-safe 샘플 리뷰로. **자동 판사(LLM)도 fool 가능하므로(아래 R3 참조), 환원불가 천장은 인간 리뷰입니다.**
+## Safety Architecture (3 layers)
+No single layer is complete, so they block in *overlap*.
+1. **L1 — mechanical floor** (`core/grounding_gate*.py`): crisis override · verse-grounding **fail-closed**
+   (exact match against the verified DB only, blocking fabrication/misquotation) · blocks absolution claims,
+   out-of-domain drift (legal/medical/financial), doctrinal verdicts, third-party personal information, and
+   harm to others. Normalization defeats obfuscation-based evasion.
+2. **L2 — semantic judgment (LLM Guardian)** (`core/grounding_gate_v4.py`): paraphrases and intent that
+   regex cannot catch are classified *semantically* by an LLM and FLAGGED.
+3. **L3 — human audit anchor**: FLAGGED/borderline cases go to a privacy-safe sample review. **Because an
+   automated judge (LLM) can also be fooled (see R3 below), the irreducible ceiling is human review.**
 
-## 사용 가이드 (Usage)
+## Usage
 
-**가장 잘 맞는 방식 = Claude 앱 / Cowork에서 이 폴더를 매핑.** 그러면 `CLAUDE.md`(세션 룰·페르소나)가 자동 로드되어, 별도 실행 없이 대화로 묵상할 수 있습니다.
+**The best-fit way = map this folder in the Claude app / Cowork.** `CLAUDE.md` (session rules · persona) then
+loads automatically, so you can reflect through conversation without running anything separately.
 
-1. **묵상 시작** — Claude 앱(또는 Cowork)에서 이 폴더를 작업 디렉토리로 매핑 → 인사하면 ✝ 경건한 매개자 페르소나가 맞이합니다.
-2. **기술 고민을 성서 렌즈로** — "리팩토링 미뤄도 되나", "사고 후 팀 신뢰가 깨졌어" 같은 기술적 딜레마를 던지면, 그에 맞는 **페르소나 렌즈**(`core/personas.json`)로 비춰줍니다:
-   - *천사*(best-practice 길) · *악마*(devil's advocate — 실패모드·합리화 적발) · *사제*(원칙·선례) · *수녀*(인내·절제) · *솔로몬*(두 선택지 트레이드오프) · *욥*(근본원인 없는 사고) · *서기관*(기록 규율) · *나단*(내가 회피하는 내 책임).
-   - **신적 존재(하느님·예수·성령·사도)는 지어내지 않고 *기록된 말씀을 인용*으로만** 전합니다(설계 핵심 구속).
-3. **자연스러운 작별 + 기억** — "세션 마감" 같은 명령어 필요 없습니다. *"이만 가볼게요"·"다음에 봐요"*처럼 자연스럽게 인사하면 알아서 묵상 흔적을 저장하고, 다음에 오면 당신을 기억하고 맞이합니다(`core/visitor_memory.py`).
+1. **Begin reflecting** — map this folder as the working directory in the Claude app (or Cowork) → greet it,
+   and the ✝ reverent-mediator persona welcomes you.
+2. **Technical concerns through a Scripture lens** — pose a technical dilemma like "is it OK to keep
+   postponing this refactor?" or "the team's trust broke after the incident," and it reflects it back
+   through the fitting **persona lens** (`core/personas.json`):
+   - *Angel* (the best-practice path) · *Devil* (devil's advocate — exposing failure modes and
+     rationalizations) · *Priest* (principle and precedent) · *Nun* (patience and restraint) · *Solomon*
+     (the trade-off between two options) · *Job* (an incident with no root cause) · *Scribe* (the discipline
+     of the record) · *Nathan* (the responsibility I am avoiding).
+   - **Divine figures (God · Jesus · the Holy Spirit · the apostles) are never invented; they speak only
+     through *quoted, recorded word*** (a core design constraint).
+3. **A natural farewell + memory** — no command like "end session" is needed. Say goodbye naturally —
+   *"I'll head off now," "see you next time"* — and it saves the traces of your reflection on its own, then
+   remembers and welcomes you when you return (`core/visitor_memory.py`).
 
-> **성서 = 절대 axiom (코어).** 검증 코퍼스는 6개 공개도메인 버전 197,009구절 — 개신교(KJV·WEB·ASV·YLT) + 천주교(Douay-Rheims, 제2경전 포함) + Apocrypha(KJVA). 한쪽에 치우치지 않도록 다버전을 두며, 인용은 *어느 검증버전과든 정확매칭*되어야 grounded(fail-closed). 코퍼스 (재)수집: `python3 core/build_scripture_db.py`.
+> **Scripture = absolute axiom (core).** The verified corpus is 197,009 verses across 6 public-domain
+> versions — Protestant (KJV · WEB · ASV · YLT) + Catholic (Douay-Rheims, including the deuterocanon) +
+> Apocrypha (KJVA). Multiple versions are kept so it does not lean to one side, and a quotation is only
+> *grounded* if it *exactly matches some verified version* (fail-closed). To (re)build the corpus:
+> `python3 core/build_scripture_db.py`.
 
-## 실행 (개발자 — 게이트/배터리 직접 검증)
+## Running it (developers — verify the gates/batteries directly)
 ```
-python3 core/build_scripture_db.py # 성서 다버전 코퍼스 수집 (CORE — core/scripture/*.json)
-python3 core/grounding_gate.py     # 키스톤(grounded PASS · 조작 FAIL_CLOSED · 위기 OVERRIDE)
-python3 core/visitor_memory.py     # 작별 감지 → 기억 → 재방문 환대 데모
-python3 core/simulate.py           # 페르소나 입장 시뮬
-python3 core/battery.py            # 적대 배터리 R1 (v1)
-GATE=v2 python3 core/battery2.py   # R2 (정교한 회피)
-GATE=v4 python3 core/battery3.py   # R3 (실 LLM Guardian — L2)
+python3 core/build_scripture_db.py # collect the multi-version Scripture corpus (CORE — core/scripture/*.json)
+python3 core/grounding_gate.py     # keystone (grounded PASS · fabrication FAIL_CLOSED · crisis OVERRIDE)
+python3 core/visitor_memory.py     # farewell detection → memory → return-welcome demo
+python3 core/simulate.py           # persona-entry simulation
+python3 core/battery.py            # adversarial battery R1 (v1)
+GATE=v2 python3 core/battery2.py   # R2 (refined evasion)
+GATE=v4 python3 core/battery3.py   # R3 (real LLM Guardian — L2)
 ```
 
-## 의존성
-- 코어 게이트(L1)는 표준 라이브러리만.
-- **L2(`grounding_gate_v4.py`)는 LLM 호출**이 필요합니다. 예시는 `claude` CLI를 subprocess로 부릅니다 —
-  사용 환경의 LLM으로 교체 가능(인터페이스: `semantic_intent_check(user_input, output) -> risk|None`).
+## Dependencies
+- The core gate (L1) uses the standard library only.
+- **L2 (`grounding_gate_v4.py`) requires an LLM call.** The example invokes the `claude` CLI as a subprocess —
+  swap in the LLM of your environment (interface: `semantic_intent_check(user_input, output) -> risk|None`).
 
-## 명명된 잔여 (정직)
-- **chat-path 미배선 (앱 모드 = prose-enforced)**: L1/L2 게이트는 각 턴을 `gate()`로 라우팅하는 **API/wrapper 경로에서만 기계 강제**됩니다. **권장 사용 모드(Claude 앱/Cowork 폴더매핑 → 자유 대화)에선 턴이 `gate()`를 거치지 않으며**, 안전 구속은 모델이 `CLAUDE.md` 페르소나 규칙을 *준수*하는 것에 의존합니다(prose-enforced, **티어 의존**). `core/grounding_gate*.py`는 **reference 구현 + 적대 배터리 하네스**이고 — 따라서 게이트 강화(예: 아래 substring-truncation 차단)는 우선 *gate/battery/API 경로*를 강화하며, chat 경로엔 페르소나 준수로 간접 전달됩니다. chat 경로의 진짜 기계 floor는 게이트를 물리는 wrapper가 필요 — **이제 `core/gate_runtime.py` · `core/gate_cli.py` · `core/RUNTIME.md`로 제공**됩니다(통합 앱이 턴별 마운트 시 기계강제; 마운트 안 한 순수 폴더매핑 chat만 prose-enforced). 상세: `DESIGN.md §5`.
-- **application-harm(theology-laundering)**: 진짜 성구를 *해로운 frame*으로 쓰는 건 기계적으로 완전 차단 불가. L1 heuristic + L2 LLM이 줄이되, **천장은 L3 인간 감사**.
-- **L2(LLM 판사)도 불완전**: 적대 테스트(R3)에서 borderline 사례를 *놓쳤습니다*. 데모를 조작하지 않고 그대로 둡니다 — 이것이 인간 앵커가 필요한 이유입니다.
-- **위기 탐지**: 예시는 키워드/LLM 기반(illustrative). 실 배포는 검증된 분류기 필요(false-negative=최악).
-- **privacy("무흔적")**: 3rd-party 모델을 통과하면 provider 보존 가능 → "무흔적"을 함부로 약속하지 말고 정직한 data-handling 고지.
-- **신학적 정합성·성례성**: harness 엔지니어링 밖. 관련 권위/전통의 판단 영역.
+## Named Residuals (honest)
+- **chat-path not wired in (app mode = prose-enforced)**: the L1/L2 gates are **mechanically enforced only on
+  the API/wrapper path** that routes each turn through `gate()`. **In the recommended usage mode (Claude
+  app/Cowork folder-mapping → free conversation), turns do not pass through `gate()`**, and the safety
+  constraint relies on the model *following* the `CLAUDE.md` persona rules (prose-enforced, **tier-dependent**).
+  `core/grounding_gate*.py` is a **reference implementation + adversarial-battery harness** — so gate
+  hardening (e.g. the substring-truncation block below) first strengthens the *gate/battery/API path*, and
+  reaches the chat path only indirectly via persona compliance. A real mechanical floor for the chat path
+  needs a wrapper that bites the gate — **now provided as `core/gate_runtime.py` · `core/gate_cli.py` ·
+  `core/RUNTIME.md`** (mechanically enforced when an integrating app mounts it per turn; only pure
+  folder-mapping chat without the mount stays prose-enforced). Details: `DESIGN.md §5`.
+- **application-harm (theology-laundering)**: using a genuine verse within a *harmful frame* cannot be fully
+  blocked mechanically. The L1 heuristic + L2 LLM reduce it, but **the ceiling is L3 human audit**.
+- **L2 (the LLM judge) is also imperfect**: in adversarial testing (R3) it *missed* borderline cases. The
+  demo is left as-is, unmanipulated — this is exactly why the human anchor is needed.
+- **crisis detection**: the example is keyword/LLM-based (illustrative). A real deployment needs a validated
+  classifier (a false negative is the worst case).
+- **privacy ("no trace")**: anything passing through a 3rd-party model may be retained by the provider → do
+  not casually promise "no trace"; give an honest data-handling notice.
+- **theological soundness · sacramentality**: outside harness engineering. The province of the relevant
+  authority/tradition.
 
-## 라이선스
-코드: `LICENSE`(MIT). 성구 데이터(`core/scripture/*.json`)=6개 공개도메인 버전(KJV·WEB·ASV·YLT·Douay-Rheims·KJVA), **모두 public domain**, 출처 getbible.net v2(`_index.json`에 버전별 라이선스·정경 범위 기록). `core/scripture_db.json`은 mock fallback. 자세한 설계·하든 이력: `DESIGN.md` · 페르소나: `core/personas.json`.
+## License
+Code: `LICENSE` (MIT). Scripture data (`core/scripture/*.json`) = 6 public-domain versions
+(KJV · WEB · ASV · YLT · Douay-Rheims · KJVA), **all public domain**, sourced from getbible.net v2
+(per-version license and canon scope recorded in `_index.json`). `core/scripture_db.json` is a mock fallback.
+Full design and hardening history: `DESIGN.md` · personas: `core/personas.json`.
 
 ---
 
 ## Built with forge-harness
 
-the-bible은 [forge-harness](https://github.com/chrono-meta/forge-harness) — *거버닝되는 AI 개발을 위한 메타-하네스* — 를 통해 설계·단련되었습니다. 안전 구조(fail-closed grounding · 3층 겹침 · 명명된 잔여 · 적대 배터리)와 페르소나 티어링은 FH의 게이트 규율(steel-quench 적대 리뷰 · relay-not-generator 구속 · honest-residual 명명)을 거쳐 나왔습니다. 화려한 기능이 아니라 *거버넌스가 자산을 따라 이동한다*는 FH의 명제를 보여주는 하나의 작동 예시입니다.
+the-bible was designed and tempered through [forge-harness](https://github.com/chrono-meta/forge-harness) —
+*a meta-harness for governed AI development*. Its safety structure (fail-closed grounding · 3-layer overlap ·
+named residuals · adversarial batteries) and persona tiering came out of FH's gate discipline (steel-quench
+adversarial review · relay-not-generator constraint · honest-residual naming). It is not a flashy feature set
+but one working example of FH's thesis that *governance travels with the asset*.
