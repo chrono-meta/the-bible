@@ -1,3 +1,6 @@
 __pycache__/
 *.pyc
 core/visitors.json
+# Terminal-stage (provisional, ungraduated) skills — local only, not published.
+# Graduate via the FH 6-item creation gate before tracking.
+.claude/

@@ -23,14 +23,26 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
-from grounding_gate import scripture_grounded, CRISIS_RESPONSE  # noqa: E402
+from grounding_gate import (  # noqa: E402
+    scripture_grounded, CRISIS_RESPONSE, crisis_response, crisis_checkin,
+    CRISIS_CHECKIN_PATTERNS, CRISIS_IDEATION, semantic_distress_check,
+)
 from grounding_gate_v2 import (  # noqa: E402
     SELF_HARM, HARM_OTHERS, CONFIDENTIAL_REQ, CONFIDENTIAL_LEAK,
     ABSOLUTION, OUT_OF_SCOPE, ADJUDICATION, RISKY_ACTION,
 )
 
 # --- L1 patched pattern sets (brittle floor — explicitly whack-a-mole over Round-2 finds) ---
-SELF_HARM_3 = SELF_HARM + [r"disappear\s*forever", r"nothing\s*matters", r"사라져\s*버리"]
+# TIER 1 (high-confidence self-harm): existing finds + oblique finality / "affairs in order".
+SELF_HARM_3 = SELF_HARM + [
+    r"disappear\s*forever", r"nothing\s*matters", r"사라져\s*버리",
+    # finality / putting-affairs-in-order — oblique but high-signal (mirrors grounding_gate Tier 1)
+    r"다\s*정리하?(고|는|려)", r"마지막\s*인사", r"유서", r"편해지고\s*싶",
+    r"putting\s*(my\s*)?affairs\s*in\s*order", r"final\s*goodbye", r"won'?t\s*be\s*(here|around)",
+] + CRISIS_IDEATION  # suicidal ideation promoted to Tier-1 OVERRIDE (single-sourced)
+# TIER 2 (low-threshold oblique distress): imported from grounding_gate so both gates share one
+# source of truth. Routes to a GENTLE check-in, not a hard escalation. Over-triggers on purpose.
+CHECKIN_3 = CRISIS_CHECKIN_PATTERNS
 ABSOLUTION_3 = ABSOLUTION + [r"깨끗합니다", r"씻겼", r"잘못\s*없", r"자유롭", r"clean\s*now", r"무죄"]
 CONFIDENTIAL_REQ_3 = CONFIDENTIAL_REQ + [r"사람들이.*고백", r"주로.*고백", r"이번\s*주.*고백", r"다들.*고백"]
 RISKY_ACTION_3 = RISKY_ACTION + [r"다\s*걸고", r"베팅", r"올인", r"한\s*번에.*걸", r"전\s*재산.*걸"]
@@ -63,11 +75,19 @@ def _audit(reason, user_input, output):
     AUDIT_QUEUE.append({"reason": reason, "input": user_input[:60], "output": output[:60]})
 
 
-def gate(user_input: str, candidate_output: str, citations: list) -> dict:
+def gate(user_input: str, candidate_output: str, citations: list, locale=None) -> dict:
     # L1 SAFETY (normalized, obfuscation-resistant)
-    if _match(SELF_HARM_3, user_input):
-        return {"verdict": "CRISIS_OVERRIDE", "output": CRISIS_RESPONSE,
-                "actions": ["escalate_to_human", "preserve_record"], "note": "self-harm (normalized)"}
+    # Tier 1 — HIGH-CONFIDENCE self-harm (also fires if a wired semantic INPUT hook returns True).
+    sem_in = semantic_distress_check(user_input)
+    if _match(SELF_HARM_3, user_input) or sem_in is True:
+        return {"verdict": "CRISIS_OVERRIDE", "output": crisis_response(locale),
+                "actions": ["escalate_to_human", "preserve_record"],
+                "note": "self-harm (normalized)" + ("; semantic-input-hook" if sem_in is True and not _match(SELF_HARM_3, user_input) else "")}
+    # Tier 2 — LOW-THRESHOLD oblique distress -> GENTLE check-in (not blank comfort). Over-triggers.
+    if _match(CHECKIN_3, user_input):
+        return {"verdict": "CRISIS_CHECKIN", "output": crisis_checkin(locale),
+                "actions": ["gentle_checkin", "offer_resource"],
+                "note": "oblique distress (hopelessness/anhedonia/worthlessness/burden) — softer than Tier-1"}
     if _match(HARM_OTHERS_3, user_input):
         return {"verdict": "CRISIS_OVERRIDE",
                 "output": "누군가를 해하려는 길로는 함께 갈 수 없습니다. 안전을 먼저 살피세요.",

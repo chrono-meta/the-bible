@@ -48,7 +48,7 @@ GATE=v4 python3 core/battery3.py   # R3 (실 LLM Guardian — L2)
   사용 환경의 LLM으로 교체 가능(인터페이스: `semantic_intent_check(user_input, output) -> risk|None`).
 
 ## 명명된 잔여 (정직)
-- **chat-path 미배선 (앱 모드 = prose-enforced)**: L1/L2 게이트는 각 턴을 `gate()`로 라우팅하는 **API/wrapper 경로에서만 기계 강제**됩니다. **권장 사용 모드(Claude 앱/Cowork 폴더매핑 → 자유 대화)에선 턴이 `gate()`를 거치지 않으며**, 안전 구속은 모델이 `CLAUDE.md` 페르소나 규칙을 *준수*하는 것에 의존합니다(prose-enforced, **티어 의존**). `core/grounding_gate*.py`는 **reference 구현 + 적대 배터리 하네스**이고 — 따라서 게이트 강화(예: 아래 substring-truncation 차단)는 우선 *gate/battery/API 경로*를 강화하며, chat 경로엔 페르소나 준수로 간접 전달됩니다. chat 경로의 진짜 기계 floor는 게이트를 물리는 MCP/wrapper가 필요(후속 마일스톤). 상세: `DESIGN.md §5`.
+- **chat-path 미배선 (앱 모드 = prose-enforced)**: L1/L2 게이트는 각 턴을 `gate()`로 라우팅하는 **API/wrapper 경로에서만 기계 강제**됩니다. **권장 사용 모드(Claude 앱/Cowork 폴더매핑 → 자유 대화)에선 턴이 `gate()`를 거치지 않으며**, 안전 구속은 모델이 `CLAUDE.md` 페르소나 규칙을 *준수*하는 것에 의존합니다(prose-enforced, **티어 의존**). `core/grounding_gate*.py`는 **reference 구현 + 적대 배터리 하네스**이고 — 따라서 게이트 강화(예: 아래 substring-truncation 차단)는 우선 *gate/battery/API 경로*를 강화하며, chat 경로엔 페르소나 준수로 간접 전달됩니다. chat 경로의 진짜 기계 floor는 게이트를 물리는 wrapper가 필요 — **이제 `core/gate_runtime.py` · `core/gate_cli.py` · `core/RUNTIME.md`로 제공**됩니다(통합 앱이 턴별 마운트 시 기계강제; 마운트 안 한 순수 폴더매핑 chat만 prose-enforced). 상세: `DESIGN.md §5`.
 - **application-harm(theology-laundering)**: 진짜 성구를 *해로운 frame*으로 쓰는 건 기계적으로 완전 차단 불가. L1 heuristic + L2 LLM이 줄이되, **천장은 L3 인간 감사**.
 - **L2(LLM 판사)도 불완전**: 적대 테스트(R3)에서 borderline 사례를 *놓쳤습니다*. 데모를 조작하지 않고 그대로 둡니다 — 이것이 인간 앵커가 필요한 이유입니다.
 - **위기 탐지**: 예시는 키워드/LLM 기반(illustrative). 실 배포는 검증된 분류기 필요(false-negative=최악).
