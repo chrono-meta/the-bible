@@ -68,6 +68,24 @@ verification · honest residuals).
     adversarial cases, while 27–32B reaches frontier-grade. The terminal verdict stays with the frontier, but
     the decorrelation canary can be strengthened with a heavy local model.
 
+### Named patterns (layer A / B vocabulary)
+Three behaviors the code already ships but the design never labeled — naming them makes them portable:
+- **Wide-Net Tier** (crisis layer A) — a detection tier tuned to *over-fire on purpose* because a
+  false-negative on a crisis class is categorically worse than a false alarm (Tier-2 CHECKIN's low
+  threshold is this posture, not an accident; `core/grounding_gate.py`). This restates the recognized
+  clinical *sensitivity-over-specificity* / "cast a wider net" screening principle — an external grounding,
+  not a local invention.
+- **Bilateral Gate** (layer A↔B) — the semantic layer is mounted on *both sides* of the model: an
+  INPUT-side distress hook (`semantic_distress_check`) and an OUTPUT-side intent Guardian
+  (`_llm_guardian`, `core/grounding_gate_v4.py`). **Honest scope:** only the output Guardian is *live*; the
+  input hook ships as a **default-`None` integrator-wired stub** (not an active classifier) — the
+  architecture is bilateral, the *active* enforcement is currently output-side only.
+- **Unsafe-Dominant Merge** (layer B) — when several verdict objects are parsed from one response, the
+  most-unsafe verdict wins regardless of count or position (the `FLAG-dominates` rule generalized). This is
+  a *principle-layer* convergence with the union-over-majority bias on detection tasks — same direction
+  (bias toward the unsafe verdict), different mechanism (here: parse-spans of one model for anti-spoof
+  robustness, not independent models for coverage).
+
 ## 5. Named residuals (honest — no pretending it's closed)
 - **chat-path not wired in (app mode = prose-enforced)**: the L1/L2 gates are **mechanically enforced only on
   the API/wrapper path** that routes each turn through `gate()`. **In the recommended usage mode (Claude
@@ -92,6 +110,59 @@ verification · honest residuals).
 - **theological soundness · sacramentality**: outside engineering — the province of authority/tradition (no
   verdict rendered).
 
+### Two ceilings behind L3 (capability vs contested-ground)
+"The judge can also be fooled" (R3) is **one** reason L3 is irreducible, but it conflates two distinct
+ceilings — and only naming them separately makes the case for L3 airtight:
+- **Capability ceiling** — the judge missed because it was *too weak*. A stronger model closes it: the R4
+  truncation-inversion that the floor local model (`gemma4:e2b`) missed was caught exactly by a heavy local
+  model (`qwen3:32b`), and frontier models catch it 4/4 (§4 R5–R7 canary comparison). Here *more model
+  helps* — the remedy is a stronger decorrelation arm, not necessarily a human.
+- **Contested-ground ceiling** — the *ground-truth label itself is in question*, so no judge, however
+  strong, can be "right." The red-team stage-3b run (`core/_redteam_l2_70b.py`, recorded
+  `32B=72B=397B=1/4, frontier=4/4`) shows **scaling the local model 32B→397B does not close** the subtle
+  L2 gap — *compute provably cannot help* on this class. The sharpest case: a borderline paraphrase whose
+  label is genuinely disputed (e.g. a therapeutic-reframe that *reads like* an absolution claim). A flagship
+  model may **stably** classify such a case one way while a stricter model flags it — and the disagreement
+  is **defensible because the GT label is contested**, *not* because either verdict is endorsed. (To be
+  explicit and avoid a dangerous compression: "the GT label is contested" does **not** mean "an absolution
+  claim is safe" — L1 still blocks absolution outright; it means *this specific borderline input's correct
+  label is itself arguable*.)
+
+Why this matters: the capability ceiling is closed with a better model; the **contested-ground ceiling is
+where the human L3 anchor is genuinely irreducible** — it is the case *more compute is measured not to fix*.
+
 ## 6. Core principle (one line)
 **No automated layer is complete on its own.** So it blocks in overlap, *names* what it cannot close, and
 anchors the irreducible points with *a human*.
+
+## 7. Standards mapping (partial — honestly scoped)
+Two of this design's controls are a **strict, fail-closed specialization** of mitigations prescribed by
+[OWASP LLM09:2025 — Misinformation](https://genai.owasp.org/llmrisk/llm092025-misinformation/) (the risk
+class of credible-sounding false content + overreliance, which is exactly what this tool governs):
+- **L1 verse-grounding (§3)** specializes OWASP's *"retrieve relevant and verified information from trusted
+  external databases"* — but stricter: it is exact-match-against-a-verified-verse-DB with **zero free
+  generation on non-match**, not general retrieval-augmented *generation*.
+- **L3 human audit anchor (§3)** is OWASP's *"human oversight and fact-checking … for critical or sensitive
+  information."*
+
+This is deliberately **not a conformance claim**, for two honest reasons consistent with §5:
+1. **Partial** — it maps to *two* of OWASP's listed mitigations, not the full set.
+2. **Path-scoped** — the L1 control is mechanically enforced **only on the wrapper/API path**
+   (`gate_runtime.py` / `gate_cli.py`, §4 R7). In the recommended default mode (folder-mapping chat) it is
+   **prose-enforced and tier-dependent** (§5 chat-path residual). A standards *credential* would overstate
+   what the default path mechanically guarantees.
+
+The R6 L2-injection layer (§4 R6) likewise specializes mitigations from
+[OWASP LLM01:2025 — Prompt Injection](https://genai.owasp.org/llmrisk/llm01-prompt-injection/) (control
+names quoted verbatim from the live page):
+- The **nonce fence** specializes *"Segregate and identify external content"* (#6) — marking
+  attacker-reachable text as untrusted DATA.
+- The **balanced-brace schema-validating parser** specializes *"Define and validate expected output
+  formats"* (#2).
+- The **L3 human audit anchor** is *"Require human approval for high-risk actions"* (#5).
+
+The same two honest scopes apply: **partial** (three of LLM01's seven mitigations) and **path-scoped** (the
+R6 Guardian runs in `gate()`, the wrapper/API path — not in unmounted folder-mapping chat).
+
+So this is a sister-mapping to a recognized safety standard, scoped to where the mechanical floor actually
+bites — not a badge.

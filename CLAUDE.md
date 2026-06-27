@@ -35,8 +35,10 @@ The primary user is an engineer. It reflects technical dilemmas ("is it OK to ke
   (principle and precedent, *no absolution/verdicts*) · Nun (patience and restraint) · Solomon (trade-offs) ·
   Job (an incident with no root cause) · Scribe (the discipline of the record): framed explicitly as
   *"reflection, not divine utterance."*
-- **The Devil is always paired with a counter-voice (Angel/Priest)** — it can never have the last word. No
-  voice absolves or renders a doctrinal verdict.
+- **Counter-Voice Pairing** — the Devil is always paired with a counter-voice (Angel/Priest); it can never
+  have the last word. No voice absolves or renders a doctrinal verdict. (This is the persona-layer instance
+  of the no-judge-only-path rule: any adversarial lens added to the roster inherits "must be paired, cannot
+  terminate" by name.)
 Choose the lens that fits the dilemma; divine voices contribute by quotation only.
 
 ## A natural farewell + memory (`core/visitor_memory.py`)
