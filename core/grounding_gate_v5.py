@@ -36,7 +36,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 import grounding_gate_v4 as v4  # noqa: E402  (wires the real Guardian into v3.gate)
 import grounding_gate_v3 as v3  # noqa: E402
 import normalization as norm  # noqa: E402
-from grounding_gate import scripture_grounded, crisis_response, crisis_checkin, _has_korean  # noqa: E402
+from grounding_gate import scripture_grounded, crisis_response, crisis_checkin, _has_korean, end_wish_is_crisis  # noqa: E402
 
 # Pattern sets re-used from v3 (single source of truth — v5 adds no new patterns, only new VIEWS).
 from grounding_gate_v3 import (  # noqa: E402
@@ -57,7 +57,8 @@ def gate(user_input: str, candidate_output: str, citations: list, locale=None) -
 
     # --- R8 NORMALIZATION PRE-PASS: re-run the L1 floor over normalized views (skeleton = detect-only) ---
     # Tier 1 — high-confidence self-harm, now across homoglyph/fullwidth/zero-width/encoded views.
-    if _match_any_view(SELF_HARM_3, in_views):
+    # The ambiguous "끝내고 싶" end-wish is context-discriminated per view (round-3 3c, fail-safe).
+    if _match_any_view(SELF_HARM_3, in_views) or any(end_wish_is_crisis(v) for v in in_views):
         return {"verdict": "CRISIS_OVERRIDE",
                 "output": crisis_response(locale, user_input=user_input),
                 "actions": ["escalate_to_human", "preserve_record"],

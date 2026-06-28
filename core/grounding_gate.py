@@ -67,7 +67,7 @@ CRISIS_PATTERNS = [
 #   Self-reference is required on the disappearance forms so benign "걱정이 사라지면" / "비가
 #   없으면 다들 좋아" do NOT trigger. Single-sourced: v3's SELF_HARM_3 imports this list.
 CRISIS_IDEATION = [
-    r"그만\s*살", r"(끝내|끝나)고\s*싶", r"없어지고\s*싶", r"더는?\s*못\s*살",
+    r"그만\s*살", r"없어지고\s*싶", r"더는?\s*못\s*살",
     r"(이번이|이게|오늘이)\s*마지막",
     r"(내가|나|날)\s*(없어지|사라지)면", r"(내가|나)\s*없으면.*(편|좋|나아|행복)",
     r"없는\s*게\s*(낫|나아|좋)",
@@ -75,6 +75,64 @@ CRISIS_IDEATION = [
     r"want\s*to\s*disappear", r"wish\s*i\s*(was|were)\s*(dead|gone)",
 ]
 CRISIS_PATTERNS = CRISIS_PATTERNS + CRISIS_IDEATION
+
+# --- Ambiguous "끝내/끝나고 싶" discriminator (round-3 3c, Case-C refinement) ---
+# "(끝내|끝나)고 싶" conflates ending a LIFE (crisis) with finishing a TASK ("이 빚 문제를 끝내고
+# 싶어" = resolve a debt — benign). It used to sit in CRISIS_IDEATION (Tier-1), hard-escalating every
+# benign task-completion (Case C). The UNAMBIGUOUS self-harm form "끝내 버리" stays in CRISIS_PATTERNS
+# (Tier-1) untouched, so demoting the ambiguous form loses no high-confidence signal.
+#
+# This is NOT a Tier-1->Tier-2 demotion (Tier-2 still blocks, so it would not fix the Case-C FP and
+# WOULD weaken genuine-crisis response). It is a context discriminator with a FAIL-SAFE default:
+# ambiguous/bare -> crisis (Tier-1, unchanged); a self/life/totality marker -> ALWAYS crisis
+# (overrides any task noun); ONLY an explicit concrete task object with no self-marker is suppressed.
+# Direction of error stays safe: a missed crisis is the worst outcome (design ranking), so suppression
+# requires positive evidence of a benign task object, never the absence of a crisis marker.
+_END_WISH = re.compile(r"(끝내|끝나)\s*고?\s*싶")
+# self / life / totality — if present, ALWAYS crisis regardless of any task noun.
+_END_SELF_TOTALITY = re.compile(
+    r"(삶|인생|살기|사는\s*게|목숨|생(을|이|마저)|"
+    r"다\s*(끝|놓|그만)|모든\s*(걸|것|게)\s*(다\s*)?끝|이제\s*그만|전부\s*다|"
+    r"내\s*(자신|존재)|나\s*(자신|를))"
+)
+# DANGER CONTEXT — death / survival / existence / unbearable-pain markers ANYWHERE in the utterance.
+# If any co-occurs with an end-wish, it is a crisis regardless of any task noun. This closes the
+# cross-family-found FN class (codex gpt-5.5, round-3 3c): an abstract container noun ("이 문제/상황을
+# 끝내고 싶어") was suppressing genuine crises whose death/existence context sat OUTSIDE the self regex
+# ("죽을 용기도 없고…", "내 생존 문제를…", "my life 문제를…"). The end-wish gates this, so a broad
+# substring match here is safe (it only fires when "끝내/끝나고 싶" is also present).
+_END_DANGER_CONTEXT = re.compile(
+    r"(죽|자살|목숨|생존|살아\s*있|살\s*(가치|이유|아갈|아야)|사는\s*(게|것)|숨(을|쉬|이)|"
+    r"사라지|없어지|더는?\s*못\s*살|그만\s*살|고통|통증|괴로(움|워|운)|"
+    r"버틸\s*수\s*없|더\s*못\s*버티|"
+    r"life|alive|exist|suicid|kill\s*myself|no\s*reason\s*to\s*live)",
+    re.I,
+)
+# concrete NON-self task objects that legitimately take "끝내고 싶" (finish/resolve), within a short
+# window BEFORE the end-wish. Deliberately concrete — a vague noun must NOT suppress a crisis. The
+# abstract containers 문제/상황 are intentionally EXCLUDED (too life-conflatable, cross-family FN);
+# a bare "이 문제를 끝내고 싶어" with no concrete object now fails safe to crisis. Case C still
+# suppresses via the concrete "빚".
+_END_TASK_OBJECT = re.compile(
+    r"(빚|대출|돈|일|업무|작업|숙제|과제|프로젝트|공부|시험|게임|회의|"
+    r"관계|싸움|논쟁|드라마|영화|책|이\s*(것|거|걸))"
+    r"\S*\s*(?:을|를|이|가|은|는|만)?\s*(?:\S+\s+){0,3}?(끝내|끝나)\s*고?\s*싶"
+)
+
+
+def end_wish_is_crisis(text: str) -> bool:
+    """True if an ambiguous '끝내/끝나고 싶' should be treated as a Tier-1 crisis signal.
+    FAIL-SAFE: returns False only when the phrase is bound to a concrete task object AND neither a
+    self/life/totality marker NOR a death/existence DANGER-context marker is present anywhere.
+    Bare/ambiguous -> True (crisis). Phrase absent -> False."""
+    t = text or ""
+    if not _END_WISH.search(t):
+        return False
+    if _END_SELF_TOTALITY.search(t) or _END_DANGER_CONTEXT.search(t):
+        return True            # life/totality OR death/existence context -> always crisis
+    if _END_TASK_OBJECT.search(t):
+        return False           # concrete task object, no danger marker -> benign (finishing a task)
+    return True                # bare/ambiguous -> fail-safe crisis
 
 # TIER 2 — LOW-THRESHOLD CHECK-IN: oblique hopelessness / anhedonia / worthlessness /
 #   burden-to-others. These are NOT explicit, so they route to a GENTLE check-in + resource
@@ -204,7 +262,7 @@ def crisis_checkin(locale=None, user_input=None) -> str:
 
 def detect_crisis(user_input: str) -> bool:
     """HIGH-CONFIDENCE crisis detection (Tier 1). True -> hard escalate."""
-    return any(re.search(p, user_input, re.I) for p in CRISIS_PATTERNS)
+    return any(re.search(p, user_input, re.I) for p in CRISIS_PATTERNS) or end_wish_is_crisis(user_input)
 
 
 def detect_checkin(user_input: str) -> bool:

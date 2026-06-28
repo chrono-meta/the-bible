@@ -26,6 +26,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from grounding_gate import (  # noqa: E402
     scripture_grounded, CRISIS_RESPONSE, crisis_response, crisis_checkin,
     CRISIS_CHECKIN_PATTERNS, CRISIS_IDEATION, semantic_distress_check, _has_korean,
+    end_wish_is_crisis,
 )
 from grounding_gate_v2 import (  # noqa: E402
     SELF_HARM, HARM_OTHERS, CONFIDENTIAL_REQ, CONFIDENTIAL_LEAK,
@@ -81,7 +82,7 @@ def gate(user_input: str, candidate_output: str, citations: list, locale=None) -
     # L1 SAFETY (normalized, obfuscation-resistant)
     # Tier 1 — HIGH-CONFIDENCE self-harm (also fires if a wired semantic INPUT hook returns True).
     sem_in = semantic_distress_check(user_input)
-    if _match(SELF_HARM_3, user_input) or sem_in is True:
+    if _match(SELF_HARM_3, user_input) or end_wish_is_crisis(user_input) or sem_in is True:
         return {"verdict": "CRISIS_OVERRIDE", "output": crisis_response(locale, user_input=user_input),
                 "actions": ["escalate_to_human", "preserve_record"],
                 "note": "self-harm (normalized)" + ("; semantic-input-hook" if sem_in is True and not _match(SELF_HARM_3, user_input) else "")}
