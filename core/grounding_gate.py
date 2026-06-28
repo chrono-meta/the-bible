@@ -108,12 +108,19 @@ CRISIS_CHECKIN_PATTERNS = [
 
 # Locale-keyed crisis resources. Stop hardcoding Korea-only. INTERNATIONAL is the fallback
 # when locale is unknown — better a "find your local line" than a wrong/unreachable number.
+# Round-3 #3: EVERY locale (not only unknown) also surfaces a maintained crisis DIRECTORY, so a stale
+# hardcoded hotline can never be the only line — the local number may change, the directory is curated.
+_CRISIS_DIRECTORY = (
+    "  · Crisis directory (kept current): https://findahelpline.com · "
+    "https://befrienders.org · https://www.iasp.info/crisis-centres-helplines/"
+)
 _CRISIS_RESOURCES = {
-    "kr": "  · 자살예방상담 109 (24시간)   · 정신건강위기상담 1577-0199",
-    "us": "  · 988 Suicide & Crisis Lifeline (call or text 988, 24/7)",
-    "gb": "  · Samaritans 116 123 (free, 24/7)   · text SHOUT to 85258",
+    "kr": "  · 자살예방상담 109 (24시간)   · 정신건강위기상담 1577-0199\n" + _CRISIS_DIRECTORY,
+    "us": "  · 988 Suicide & Crisis Lifeline (call or text 988, 24/7)\n" + _CRISIS_DIRECTORY,
+    "gb": "  · Samaritans 116 123 (free, 24/7)   · text SHOUT to 85258\n" + _CRISIS_DIRECTORY,
     "international": (
         "  · Find a local crisis line: https://findahelpline.com  (or your country's emergency number)\n"
+        + _CRISIS_DIRECTORY + "\n"
         "  · If you are in immediate danger, contact local emergency services now."
     ),
 }

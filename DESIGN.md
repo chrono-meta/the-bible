@@ -18,9 +18,11 @@ verification · honest residuals).
 - **Honest framing** — grants no absolution; names residuals instead of hiding them.
 
 ## 3. The 3-layer safety stack (no layer is complete alone → overlap)
-- **L1 mechanical floor** (`grounding_gate.py`~`_v3.py`): grounding fail-closed · crisis/harm-to-others
-  override · blocks absolution claims, out-of-domain drift, doctrinal verdicts, third-party information ·
-  normalization (defeats obfuscation-based evasion). Closes the *cheap* class.
+- **L1 mechanical floor** (`grounding_gate.py`~`_v3.py`, normalization pre-pass `normalization.py` +
+  `grounding_gate_v5.py`): grounding fail-closed · crisis/harm-to-others override · blocks absolution claims,
+  out-of-domain drift, doctrinal verdicts, third-party information · **normalization pre-pass** re-runs the
+  patterns over NFKC / UTS#39-skeleton / combining-strip / decoded-base64-hex views to defeat
+  homoglyph/fullwidth/zero-width/encoded evasion (§4 R8). Closes the *cheap* class.
 - **L2 semantic (LLM Guardian)** (`grounding_gate_v4.py`): an LLM classifies, by meaning, the paraphrases/
   intent that regex cannot catch → FLAG.
 - **L3 human audit anchor**: FLAGGED/borderline → sample review. Because *an automated judge (LLM) can also be
@@ -67,6 +69,32 @@ verification · honest residuals).
     "fool's heart, not authoritative"). → **the canary tier is load-bearing**: e2b is insufficient for subtle
     adversarial cases, while 27–32B reaches frontier-grade. The terminal verdict stays with the frontier, but
     the decorrelation canary can be strengthened with a heavy local model.
+- **R8 normalization pre-pass (Round-3 strengthening, 2026-06-28)**: v3's L1 only stripped whitespace, so a
+  safety-tripping intent written in **homoglyphs** (`dіe`), **fullwidth** (`ｄｉｅ`), **zero-width splits**, or a
+  **base64/hex blob** slipped past every regex unchanged. Added `core/normalization.py` (stdlib-only,
+  import-clean) + `core/grounding_gate_v5.py`: a pre-pass that re-runs the existing L1 safety patterns over
+  several **normalized VIEWS** of input/output (NFKC · UTS#39 skeleton · combining-mark strip · decoded
+  base64/hex) and blocks if ANY view trips — a union over views, recall-increasing, fail-closed in direction.
+  **Invariant**: the UTS#39 skeleton is detection-only — never the canonical text fed downstream (it is
+  over-inclusive); on a clean pre-pass v5 falls through to v4 with the ORIGINAL text. An input that was
+  obfuscated but de-obfuscates clean is **FLAGGED to L3** (the evasion attempt is itself the signal), while
+  benign multilingual text (KR+EN in separate words) and accented Latin (`café`, `résumé`) are **not**
+  flagged. Discovery #2 **CPT** (chars-per-token, arXiv:2510.26847): the cited ~99.7% detector needs a BPE
+  tokenizer, which would break L1's stdlib contract — so the floor ships base64/hex decode-rescan and exposes
+  `cpt_obfuscation_check` as a default-`None` integrator hook (the cited figure belongs to the wired path, not
+  claimed for the floor). Discovery #3 **locale**: every locale now also surfaces a maintained crisis
+  directory (findahelpline / Befrienders / IASP), so a stale hardcoded hotline can never be the only line;
+  coded-idiom / code-switched distress that carries no keyword is explicitly assigned to L2/L3.
+  - **Cross-family adversarial audit (codex `gpt-5.5`, a different model family — `auto-decorrelation`
+    doctrine for load-bearing safety code).** It caught **five fail-open / over-flag classes the same-family
+    author + battery + target-tier sim all shared**: (1) base64 fail-open on short (`{16,}` threshold missed
+    a 15-char `kill myself`) and CJK-glued (`\b` boundary) payloads; (2) **same-script Latin/IPA homoglyphs**
+    (`kɪll` U+026A, `ɑbsolve` U+0251) and **combining-overlay** (`k̶i̶l̶l̶` U+0336) — invisible to a
+    cross-script-only check and to NFKC; (3) clean zero-width/bidi obfuscation not raised to L3; (4) a benign
+    base64-looking token over-flagging; (5) unbounded decode work. Every finding was **source-closed by
+    repro** (mechanical anchor, not reviewer agreement) then fixed and **regression-locked** in `battery4.py`
+    (O7–O13). This is the decorrelation value made concrete — the obfuscation/encoding blind spot was
+    *correlated* across the same family; only a different family surfaced it.
 
 ### Named patterns (layer A / B vocabulary)
 Three behaviors the code already ships but the design never labeled — naming them makes them portable:
@@ -105,6 +133,12 @@ Three behaviors the code already ships but the design never labeled — naming t
   semantic hook + locale (§4 R5), but the pattern floor is *still infinitely evadable* (a token-free
   paraphrase slips) → over-trigger · the `semantic_distress_check` hook · L3 are the ceiling for that reason.
   A real deployment should use a validated INPUT classifier.
+- **normalization is a curated floor, not complete** (§4 R8): the confusables table is a high-value subset
+  (Cyrillic/Greek + common Latin/IPA lookalikes), **not** the full Unicode `confusables.txt`; the stdlib
+  decode-rescan covers base64/hex but not Caesar/rot13/reversed ciphers or leetspeak. An unmapped homoglyph
+  or an undecoded cipher can still evade the views — those are left to the `cpt_obfuscation_check` hook and
+  the L2 Guardian, named here rather than claimed closed. The pre-pass raises recall on the cheap obfuscation
+  classes; it does not make L1 complete (the whole point of L2/L3).
 - **privacy ("no trace")**: anything passing through a 3rd-party model may be retained by the provider → give
   an honest data-handling notice (no false confidentiality promise).
 - **theological soundness · sacramentality**: outside engineering — the province of authority/tradition (no
