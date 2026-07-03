@@ -27,7 +27,31 @@ from grounding_gate import (  # noqa: E402
 SELF_HARM = [
     r"죽고\s*싶", r"자해", r"살\s*이유.*없", r"사라지고\s*싶", r"사라지면", r"없어지면",
     r"내가\s*없어", r"다들\s*(편|나으)", r"끝내\s*버리",
-    r"kill\s*myself", r"suicid", r"end\s*it\s*all", r"self[\s-]*harm", r"don'?t\s*want\s*to\s*live",
+    r"kill\s*myself", r"suicid", r"end\s*it\s*all", r"self[\s-]*harm",
+    # ("don't want to live" moved below to a TERMINAL-bounded form — the old unbounded pattern here
+    #  hard-blocked benign "I don't want to live in Seoul"; Codex round-4 2026-07-03.)
+    # English coverage gap closed 2026-07-03 (Codex): common death/alive phrasings outside the
+    # enumerated set reached PASS on the shipped v3 path. Err-safe on a crisis floor (a false
+    # positive is a caring check-in; a false negative is the worst case).
+    r"want\s*to\s*die", r"wanna\s*die",
+    r"want\s*to\s*be\s*dead\b(?=\s*($|[.!?,]))",
+    # contraction AND expanded forms (do not / cannot / can not). Curly apostrophes are folded in a
+    # normalized view (normalization._fold_apostrophes), so ASCII patterns match 'don’t' too.
+    r"(don'?t|do\s*not)\s*want\s*to\s*(exist|be\s*(alive|here))\b(?=\s*($|[.!?,]|\s+any))",
+    # RECALL-FIRST, err-safe (crisis floor — decided 2026-07-03 after a 6-round precision/recall
+    # oscillation proved no regex both catches every "don't want to live <intensifier>" AND passes
+    # "live in <place>"). For a SELF-HARM floor recall dominates: a MISS is catastrophic, an
+    # over-block is a caring check-in. So "don't/do not want to live" matches broadly (terminal OR any
+    # continuation — "another day", "past tonight", "in this world anymore" all caught). Named residual:
+    # benign relocation ("I don't want to live in Seoul") ALSO trips this and is answered with support
+    # rather than passed — the deliberate err-safe direction; precise place-vs-crisis disambiguation is
+    # the L2 semantic Guardian's job, per the L1-is-partial design (grounding_gate_v3 docstring).
+    r"(don'?t|do\s*not)\s*want\s*to\s*live\b",
+    # go-on / keep-going / keep-living are TERMINAL-bounded so "go on Friday" / "go on stage" are benign.
+    r"(can'?t|can\s*not|cannot)\s*(keep\s*(living|going)|go\s*on)\b(?=\s*($|[.!?,]|\s+any))",
+    r"wish\s*(that\s*)?(i\s*)?(was|were)\s*dead\b(?=\s*($|[.!?,]))",  # not "dead wrong about this"
+    r"better\s*off\s*dead", r"rather\s*be\s*dead",
+    r"no\s*reason\s*to\s*(live|go\s*on)\b(?=\s*($|[.!?,]|\s+any))",
 ]
 HARM_OTHERS = [
     r"복수", r"죽이고\s*싶", r"해치고\s*싶", r"죽도록\s*미워", r"가만\s*안\s*둬",

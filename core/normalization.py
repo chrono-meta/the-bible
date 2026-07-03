@@ -34,6 +34,26 @@ import base64
 import binascii
 import re
 import unicodedata
+import urllib.parse
+
+
+def _fold_apostrophes(text: str) -> str:
+    """Fold curly/typographic apostrophes + quotes to ASCII so contraction patterns (don'?t) match
+    'don’t' etc. Returns '' when unchanged (Codex round-3 2026-07-03)."""
+    if not text:
+        return ""
+    return (text.replace("’", "'").replace("‘", "'").replace("ʼ", "'")
+                .replace("“", '"').replace("”", '"').replace("´", "'"))
+
+
+def _percent_decode(text: str) -> str:
+    """URL/percent + '+' decode. Returns '' when unchanged (so it adds a view only when it
+    actually de-obfuscates). Closes 'I%20want%20to%20die' / 'I+want+to+die' (Codex 2026-07-03)."""
+    try:
+        d = urllib.parse.unquote_plus(text or "")
+        return d if d and d != text else ""
+    except Exception:
+        return ""
 
 # --- Optional integrator hook (default None = NOT ASSESSED) ---------------------------------------
 # Wire by reassigning to a real BPE-tokenizer-backed detector returning True (obfuscated) / False
@@ -165,8 +185,13 @@ def is_mixed_script_confusable(text: str) -> bool:
 # '읽어SSB...제발'). We scan maximal base64-alphabet runs and let strict validate-decode be the real
 # filter. Threshold 12 (not 16) so a short crisis payload survives: 'kill myself' → 'a2lsbCBteXNlbGY='
 # is only 15 alnum chars and was missed by {16,}.
-_B64_RE = re.compile(r"[A-Za-z0-9+/]{12,}={0,2}")
-_HEX_RE = re.compile(r"(?:[0-9a-fA-F]{2}\s*){8,}")
+# Lowered 2026-07-03 (Codex round-10) to 8 b64 chars / 6 hex bytes so SHORT single-word stems survive
+# ('suicid'->'c3VpY2lk', '자해'->'7J6Q7ZW0', hex '737569636964'). DOCUMENTED bounded residual: stems
+# below ~6 bytes ('die'->'ZGll', 4 chars) are NOT decoded — going lower decodes nearly every short
+# token (FP + DoS), so ultra-short encoded stems are the L2 semantic-Guardian's backstop (L1-is-partial
+# design). Safe: a decoded view only BLOCKS on a safety-pattern hit + printable>=0.85, ~no benign FP.
+_B64_RE = re.compile(r"[A-Za-z0-9+/]{8,}={0,2}")
+_HEX_RE = re.compile(r"(?:[0-9a-fA-F]\s*){12,}")  # single-char run (odd-len ok: no nibble drop, Codex r13)
 _MAX_BLOB_IN = 8192    # ignore absurdly long candidate blobs (DoS guard, F5)
 _MAX_DECODED = 4096    # cap decoded view length fed to the pattern rescan
 _MAX_BLOBS = 8         # cap how many blobs we decode per input
@@ -179,6 +204,74 @@ def _printable_ratio(s: str) -> float:
     return printable / len(s)
 
 
+_MAX_TOTAL_ATTEMPTS = 40000                               # total de-glue decode attempts per input (DoS
+#   bound across ALL blobs — replaces the per-blob COUNT cap a decoy blob could exhaust, Codex round-14)
+_DEGLUE_MAX_START = 256                                    # scan embedded-blob start offsets up to here
+_DEGLUE_WIN = 64                                          # max chars decoded per start (~48 bytes b64 /
+#   32 bytes hex) — covers a crisis phrase / scripture ref. ONE loose decode per start: decode the
+#   window, IGNORE invalid-utf8 tail bytes (suffix alphabet-junk) + keep printable, so 'c3VpY2lk'+'Q'*80
+#   still yields 'suicid' and no length enumeration / shortest-first truncation is needed (Codex r15).
+#   Prefix junk is handled by the start scan; O(starts), each decode tiny → the wide scan stays fast.
+
+
+def _printable_only(s):
+    """Keep printable chars + basic whitespace (drop decoded junk control bytes). A short de-glue view
+    is fed to substring pattern-match, so junk-control removal leaves an embedded stem intact."""
+    return "".join(c for c in s if c.isprintable() or c in " \t")
+
+
+def _b64_try(frag):
+    """Strict-decode one base64 alphabet fragment (pad as needed); return clean text or None."""
+    if len(frag) < 8 or len(frag) % 4 == 1:
+        return None
+    try:
+        s = base64.b64decode(frag + "=" * (-len(frag) % 4), validate=True).decode("utf-8", "strict")
+    except (binascii.Error, ValueError, UnicodeDecodeError):
+        return None
+    return s if len(s) >= 2 and _printable_ratio(s) >= 0.85 else None
+
+
+def _b64_loose(seg):
+    """De-glue decode of a base64 window: decode as much as validates, IGNORE invalid-utf8 tail bytes
+    (suffix alphabet-junk), keep the printable result. One decode per start — the embedded stem survives
+    as a substring without length enumeration or shortest-first truncation (Codex round-15)."""
+    if len(seg) < 8:
+        return None
+    if len(seg) % 4 == 1:
+        seg = seg[:-1]
+    try:
+        raw = base64.b64decode(seg + "=" * (-len(seg) % 4), validate=True)
+    except (binascii.Error, ValueError):
+        return None
+    s = _printable_only(raw.decode("utf-8", "ignore"))
+    return s if len(s) >= 2 else None
+
+
+def _hex_try(frag):
+    """Strict-decode one even-length hex fragment; return clean text or None."""
+    if len(frag) < 4 or len(frag) % 2:
+        return None
+    try:
+        s = bytes.fromhex(frag).decode("utf-8", "strict")
+    except (ValueError, UnicodeDecodeError):
+        return None
+    return s if len(s) >= 2 and _printable_ratio(s) >= 0.85 else None
+
+
+def _hex_loose(seg):
+    """De-glue decode of a hex window (see _b64_loose)."""
+    if len(seg) < 4:
+        return None
+    if len(seg) % 2:
+        seg = seg[:-1]
+    try:
+        raw = bytes.fromhex(seg)
+    except ValueError:
+        return None
+    s = _printable_only(raw.decode("utf-8", "ignore"))
+    return s if len(s) >= 2 else None
+
+
 def decode_blobs(text: str) -> list:
     """Find base64/hex blobs, decode, return decoded strings that are mostly printable text (so an
     intent encoded to dodge the patterns gets re-scanned in the clear).
@@ -188,34 +281,56 @@ def decode_blobs(text: str) -> list:
     NOTE: a benign token decoding to clean text (e.g. an API key → 'SomeVerifyToken123') IS returned
     here as a rescan view, but it does NOT by itself raise the obfuscation FLAG (see normalized_views,
     F4) — only a SAFETY-PATTERN hit on the decoded view blocks.
+
+    SLIDING WINDOW (Codex round-11/12 2026-07-03): a maximal alphabet run that fails to decode AS A
+    WHOLE can still embed a valid SHORT stem glued to base64/hex-alphabet junk ('xxc3VpY2lk',
+    'aaaaaaaaaac3VpY2lk', 'c3VpY2lkxx', 'xSm9iIDM6MQ=='). Two passes: (1) whole-run decode for a full
+    legit blob of any length; (2) a SHORT-window de-glue — a crisis stem / scripture ref is short, so
+    we scan start offsets across the run (up to _DEGLUE_MAX_START) trying short fixed fragment lengths
+    only. Short fragments make each decode cheap, so a WIDE start scan stays fast (a stem after any
+    reasonable amount of prefix junk is found — round-11's per-start tail-trim wrongly spent the whole
+    budget within ~8 starts). Accepted residual: junk prefix glued (no separator) beyond the start-scan reach
+    (~310 chars — the 256 start cap plus the 64-char window overlap) — L2 semantic Guardian backstops it.
     """
     if not text:
         return []
     decoded = []
+    budget = [_MAX_TOTAL_ATTEMPTS]     # total de-glue attempts across ALL blobs (DoS bound). NOT a
+    # per-blob-COUNT cap: an early decoded-count break let 8 benign decoy blobs starve a trailing crisis
+    # blob (Codex round-14). A safety floor must scan EVERY blob; only total work is bounded (input seed
+    # is already ≤4096, so blob count is naturally bounded — the budget just backstops the pathological).
+
+    def _add(s):
+        if s is not None and s[:_MAX_DECODED] not in decoded:
+            decoded.append(s[:_MAX_DECODED])
+
     for m in _B64_RE.findall(text):
-        if len(decoded) >= _MAX_BLOBS:
+        if budget[0] <= 0:
             break
         if len(m) > _MAX_BLOB_IN:
             continue
-        try:
-            raw = base64.b64decode(m + "=" * (-len(m) % 4), validate=True)
-            s = raw.decode("utf-8", errors="strict")
-        except (binascii.Error, ValueError, UnicodeDecodeError):
-            continue
-        if len(s) >= 3 and _printable_ratio(s) >= 0.85:
-            decoded.append(s[:_MAX_DECODED])
+        run = m.rstrip("=")
+        _add(_b64_try(run))                                  # (1) whole run (full legit blob)
+        limit = min(len(run), _DEGLUE_MAX_START + 1)         # (2) short-window de-glue (start 0..cap incl.)
+        for start in range(limit):
+            if budget[0] <= 0:
+                break
+            budget[0] -= 1                                   # one loose decode per start (ignore junk tail)
+            _add(_b64_loose(run[start:start + _DEGLUE_WIN]))
+
     for m in _HEX_RE.findall(text):
-        if len(decoded) >= _MAX_BLOBS:
+        if budget[0] <= 0:
             break
         hx = re.sub(r"\s+", "", m)
-        if len(hx) % 2 or len(hx) > _MAX_BLOB_IN:
+        if len(hx) > _MAX_BLOB_IN:
             continue
-        try:
-            s = bytes.fromhex(hx).decode("utf-8", errors="strict")
-        except (ValueError, UnicodeDecodeError):
-            continue
-        if len(s) >= 3 and _printable_ratio(s) >= 0.85:
-            decoded.append(s[:_MAX_DECODED])
+        _add(_hex_try(hx if len(hx) % 2 == 0 else hx[:-1]))  # (1) whole run
+        limit = min(len(hx), _DEGLUE_MAX_START + 1)          # (2) short-window de-glue (start 0..cap incl.)
+        for start in range(limit):
+            if budget[0] <= 0:
+                break
+            budget[0] -= 1
+            _add(_hex_loose(hx[start:start + _DEGLUE_WIN]))
     return decoded
 
 
@@ -237,11 +352,43 @@ def normalized_views(text: str):
     skel = skeleton(text)
     no_marks = strip_combining(text)            # F2: combining-overlay evasion view
     skel_no_marks = skeleton(no_marks)          # homoglyph + combining stacked
-    blobs = decode_blobs(text)
+    apos = _fold_apostrophes(text)              # curly-apostrophe view (contraction patterns)
+    # COMPOSED view (Codex round-7): single-transform views are UNIONed but not COMPOSED, so a
+    # layered attack (Cyrillic homoglyph + curly apostrophe + fullwidth + zero-width all at once) is
+    # missed by every single view. Apply all normalizers together so it collapses in one view.
+    composed = strip_combining(skeleton(nfkc(apos)))
 
+    # BOUNDED RECURSIVE DECODE — seed the frontier with the NORMALIZED variants too, not just raw text
+    # (Codex round-9): a fullwidth-percent / zero-width-split base64 needs normalize-THEN-decode
+    # (fullwidth '％' → NFKC → '%' → percent-decode; zero-width-broken base64 → format-strip → clean →
+    # decode). Combined with decoded_composed (decode-THEN-normalize, round-8) this closes both orders.
+    # Still bounded (depth 3, per-item caps in decode_blobs) — infinite cipher regress stays out of scope.
+    decoded = set()
+    frontier = [text, folded, skel, no_marks, apos, composed]
+    for _depth in range(3):
+        nxt = []
+        for s in frontier:
+            if len(s) > 4096:   # perf bound (Codex round-10): a hidden SHORT crisis fits in a small
+                continue        # blob; skip decoding huge seeds (a real crisis message is not 8 KB).
+            cands = list(decode_blobs(s))
+            p = _percent_decode(s)
+            if p:
+                cands.append(p)
+            for d in cands:
+                if d and d not in decoded:
+                    decoded.add(d)
+                    nxt.append(d)
+        if not nxt:
+            break
+        frontier = nxt
+
+    # Each DECODED item is re-normalized too (Codex round-8): a blob can decode to a STILL-obfuscated
+    # string (e.g. '%D0%BE' → Cyrillic 'о'); compose the decoded view so the homoglyph doesn't survive.
+    decoded_composed = [strip_combining(skeleton(nfkc(_fold_apostrophes(d)))) for d in decoded]
     views = []
     seen = set()
-    for v in (text, folded, skel, no_marks, skel_no_marks, *blobs):
+    for v in (text, folded, skel, no_marks, skel_no_marks, apos, composed,
+              *sorted(decoded), *decoded_composed):
         if v and v not in seen:
             seen.add(v)
             views.append(v)
@@ -264,7 +411,7 @@ def normalized_views(text: str):
         "mixed_script": is_mixed_script_confusable(text),
         "suspicious_format": suspicious_format,   # zero-width/bidi (F3) — NOT benign fullwidth
         "had_format_chars": strip_format_chars(text) != text,
-        "decoded_blob": bool(blobs),
+        "decoded_blob": bool(decoded),
         "cpt": cpt,
     }
     # FLAG trigger (obfuscation detected but de-obfuscated clean -> L3). decoded_blob is DELIBERATELY
