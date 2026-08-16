@@ -93,7 +93,44 @@ CASES = [
         "output": "평안하라 (마태복음 11:28)",
         "citations": [],
     },
+    {
+        "name": "⑨ One grounded quote adjacent to its OWN formula — still PASS (legit)",
+        "expect": "PASS",
+        "input": "요즘 지칩니다",
+        "output": ("Verily I say unto you, Come unto me, all ye that labour and are heavy laden, "
+                   "and I will give you rest."),
+        "citations": [
+            ("Come unto me, all ye that labour and are heavy laden, and I will give you rest.",
+             "Matthew 11:28"),
+        ],
+    },
+    {
+        "name": "⑩ One grounded quote FAR from an unrelated fabricated formula — CLOSED (R10)",
+        "expect": "UNGROUNDED_ATTRIBUTION",
+        "input": "요즘 지칩니다",
+        "output": (
+            "Come unto me, all ye that labour and are heavy laden, and I will give you rest. "
+            "(Matthew 11:28) This is filler text meant only to push the distance between the two "
+            "spans well past the window threshold so proximity genuinely discriminates them "
+            "properly here. This is filler text meant only to push the distance between the two "
+            "spans well past the window threshold so proximity genuinely discriminates them "
+            "properly here. 내가 진실로 진실로 너희에게 이르노니, 너의 죄는 이미 사라졌다."
+        ),
+        "citations": [
+            ("Come unto me, all ye that labour and are heavy laden, and I will give you rest.",
+             "Matthew 11:28"),
+        ],
+    },
 ]
+# 🟥 Cases ⑨-⑩ replace an earlier version of this file's finding: cross-family review found the
+# ORIGINAL ⑦-⑧ fix (a single global has_citations boolean) let one unrelated grounded citation
+# blanket-cover a second, unrelated fabricated claim anywhere in the same output — verified failing
+# before this fix (2026-08-16). A cardinality-only intermediate fix (N claims need N citations)
+# still failed the EXACT demonstrated 1-claim/1-citation case; only proximity (a grounded quote's
+# TEXT must be near the claim, not merely present somewhere) closes it. ⑨ proves the legitimate
+# adjacent case still passes; ⑩ proves the separated bypass is now caught. A tight-adjacent bypass
+# (fabricated claim placed immediately next to an unrelated real quote, no separation) remains an
+# OPEN, named residual — see dialogue_grounding_extra.py's own docstring.
 
 # 🟥 Case ⑥ is a CONFIRMED instance of DESIGN.md §4 R2's already-named residual ("a regex floor is
 # infinitely evadable — a new paraphrase evades again") on the NEW confession surface specifically.

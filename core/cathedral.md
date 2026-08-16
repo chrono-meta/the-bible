@@ -74,6 +74,15 @@ paraphrase space (`DESIGN.md §4 R2` already names this as the reason L2 exists 
 does not exist on this mode's mounted path). This mode relies on the witness-not-verdict prose
 rule for that class — it is not mechanically enforced today. Do not claim otherwise.
 
+🟥 **These residuals COMPOUND, not just coexist** (cross-family adversarial pass #2, 2026-08-16):
+none of the three rows above is checked against the others, so a single confession reply can stack
+them — e.g. *"그건 그렇게 나쁜 일은 아니었어요... 이제 당신은 온전합니다"* combines a minimizing
+moral verdict WITH a paraphrase-absolution in one turn. Read in sequence that is a stronger,
+sacrament-shaped clearance than either sentence alone, and it is exactly as invisible to the regex
+floor as each half is separately (isolated-substring patterns, no interaction detection). This is
+not a fourth gap — it is the honest scope of the first three: "named, not closed" already covers a
+turn that uses more than one of them at once.
+
 ## The mechanical check this mode adds
 
 **Call `core/dialogue_gate.dialogue_gate(...)` for this mode — not `grounding_gate_v3.gate` or
@@ -86,9 +95,21 @@ silently PASSing. Every OTHER surface in this repo (the lens mode, plain relay) 
 this composition is scoped to dialogue/cathedral only.
 
 Every candidate reply in **either** cathedral room — before it is shown to the user — is run
-through this composed check (same subprocess-bridge shape as `core/RUNTIME.md` Option 2 — see
-`dialogue_gate.py`'s own `_demo()` for the call pattern). Verdict `PASS` → surface the draft
-unchanged. Anything else → surface `result["output"]` instead of the draft.
+through this composed check. The literal, runnable form (same subprocess-bridge shape as
+`core/RUNTIME.md` Option 2 — no reading of `dialogue_gate.py`'s source is needed to use it):
+
+```bash
+python3 -c "import json,sys; sys.path.insert(0,'core'); from dialogue_gate import dialogue_gate; \
+r=dialogue_gate(**json.load(open('turn.json'))); print(json.dumps(r,ensure_ascii=False)); \
+sys.exit(0 if r['verdict']=='PASS' else 1)"
+```
+
+where `turn.json` is `{"user_input": ..., "candidate_output": ..., "citations": [[quote, ref], ...]}`
+(the SAME shape `core/RUNTIME.md`'s Option 2 already documents for the base gate). Exit 0 → surface
+the draft unchanged. Exit 1 → surface the printed JSON's `"output"` field instead of the draft.
+(A cold-read audit, 2026-08-16, found this section pointing only at `dialogue_gate.py`'s own
+`_demo()` — not a runnable command — which is a dead end for a session that never opens that file.
+This block is the fix, not a rewording: the exact command, not a pointer to one.)
 
 🟥 **Honest scope of "mechanical"**: this closes findings 1-2 *structurally* — the check exists and
 is verified to fire (`core/simulate_dialogue.py` cases ⑦-⑧). Whether it actually *runs* on a given

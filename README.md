@@ -72,7 +72,8 @@ GATE=v2 python3 core/battery2.py   # R2 (refined evasion)
 GATE=v4 python3 core/battery3.py   # R3 (real LLM Guardian — L2)
 python3 core/battery4.py           # R8 (homoglyph/fullwidth/zero-width/base64 normalization pre-pass)
 python3 core/battery5.py           # R9 (ROT-13/leetspeak — closed after a third-party red-team finding)
-python3 core/simulate_dialogue.py  # character-dialogue + cathedral known-pair proof (8 cases)
+python3 core/battery6.py           # R10 (concessive Korean -어도/-더라도 + non-contracted EN crisis forms)
+python3 core/simulate_dialogue.py  # character-dialogue + cathedral known-pair proof (10 cases)
 ```
 
 ## Dependencies
@@ -100,7 +101,10 @@ python3 core/simulate_dialogue.py  # character-dialogue + cathedral known-pair p
   (`deepteam`) found ROT-13 and leetspeak encoding fully bypassed crisis detection (`CRISIS_OVERRIDE →
   PASS`) — closed in `core/normalization.py` (two new detection-only views, no change to the pattern lists
   or `grounding_gate_v3.py`). General Caesar-cipher shifts and character-reversal remain open — see
-  `DESIGN.md §4 R9`.
+  `DESIGN.md §4 R9`. **R10 (2026-08-16)**: a blind vulnerable-user persona sweep found the concessive
+  Korean form (없어도/더라도, "even if I'm gone") and non-contracted English forms slipped both crisis
+  tiers — closed by adding the missing grammatical alternatives in `core/grounding_gate.py`, no pattern
+  removed. See `DESIGN.md §4 R10`.
 - **privacy ("no trace")**: anything passing through a 3rd-party model may be retained by the provider → do
   not casually promise "no trace"; give an honest data-handling notice.
 - **theological soundness · sacramentality**: outside harness engineering. The province of the relevant

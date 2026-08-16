@@ -69,7 +69,12 @@ CRISIS_PATTERNS = [
 CRISIS_IDEATION = [
     r"그만\s*살", r"없어지고\s*싶", r"더는?\s*못\s*살",
     r"(이번이|이게|오늘이)\s*마지막",
-    r"(내가|나|날)\s*(없어지|사라지)면", r"(내가|나)\s*없으면.*(편|좋|나아|행복)",
+    # R10 (2026-08-16, third-party vulnerable-user probe): the conditional -면 ("if I'm gone") form
+    # was covered, but the concessive -어도/-더라도 ("EVEN IF I'm gone") form was not — same burden/
+    # disappearance ideation, arguably MORE resigned than the conditional, and it slipped BOTH tiers
+    # (repro'd: "나 없어도 다들 더 나을 것 같아" / "내가 없어져도 아무도 모를 것 같아요"). Added,
+    # not replaced — the -면 form stays.
+    r"(내가|나|날)\s*(없어지|사라지)(면|어도|더라도)", r"(내가|나)\s*(없으면|없어도|없더라도).*(편|좋|나아|행복)",
     r"없는\s*게\s*(낫|나아|좋)",
     r"better\s*off\s*without\s*me", r"no\s*reason\s*to\s*live",
     r"want\s*to\s*disappear", r"wish\s*i\s*(was|were)\s*(dead|gone)",
@@ -146,11 +151,18 @@ CRISIS_CHECKIN_PATTERNS = [
     r"nothing\s*matters", r"what'?s\s*the\s*point",
     # anhedonia / exhaustion ("just tired", "can't go on")
     r"그냥\s*(좀\s*)?지(쳤|쳐|친다)", r"지쳤", r"지친다", r"버틸\s*수\s*없", r"더\s*못\s*버티",
-    r"so\s*tired", r"can'?t\s*(go\s*on|keep\s*going|do\s*this\s*anymore)", r"exhausted\s*by\s*everything",
+    r"so\s*tired", r"exhausted\s*by\s*everything",
+    # R10 (2026-08-16, third-party vulnerable-user probe): the original can'?t\s*(go\s*on|keep\s*going|
+    # do\s*this\s*anymore) required the literal contraction + one of three exact verb phrases — missed
+    # "I don't think I can keep doing this" (no "'t" on "can", different verb form) and "can't keep
+    # this up" (a fourth verb phrase, "keep X up", not in the original three). Added, not replaced.
+    r"can'?t\s*(go\s*on|keep\s*going|do\s*this\s*anymore|keep\s*(this|it)\s*up)",
+    r"don'?t\s*think\s*i\s*can\s*(keep|go\s*on|do\s*this)",
     # worthlessness
     r"쓸모\s*없", r"가치\s*없", r"내가\s*뭐라고", r"worthless", r"no\s*good\s*to\s*anyone",
-    # burden-to-others
-    r"짐(이|만)?\s*(되|돼|될)", r"부담(만)?\s*(되|줘|주)", r"나\s*없으면\s*(다들|편)", r"없는\s*게\s*나",
+    # burden-to-others (R10: -어도/-더라도 concessive added alongside -면, same reason as CRISIS_IDEATION)
+    r"짐(이|만)?\s*(되|돼|될)", r"부담(만)?\s*(되|줘|주)", r"나\s*(없으면|없어도|없더라도)\s*(다들|편)",
+    r"없는\s*게\s*나",
     r"burden\s*to\s*(everyone|anyone|others|them|you)", r"better\s*off\s*without\s*me",
     # loneliness / wanting to vanish (softer than TIER-1 "사라지고 싶")
     r"혼자(인|라|예요|에요|야)?", r"외롭", r"사라지(고|면|니|는|버)", r"all\s*alone", r"(so\s*)?lonely",
