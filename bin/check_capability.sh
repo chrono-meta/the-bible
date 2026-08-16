@@ -32,7 +32,10 @@ _KNOWN_NEGATIVE_INPUT='I read a quiet chapter today and felt at peace'    # MUST
 _run() {
   # $1 = user_input to feed the gate. Runs grounding_gate_v3.gate(user_input, "", []) and prints its
   # verdict — a real call into this repo's actual safety floor, not a simulation of one.
-  python3 - "$1" <<'PYEOF'
+  # -B: no .pyc bytecode cache written — `writes: read-only` is declared below and the M6 effect
+  # probe caught this exact write on the first run (core/__pycache__/*.pyc from the `import` alone).
+  # A real, verified violation, not a hypothetical — this is the fix, not a guess.
+  PYTHONDONTWRITEBYTECODE=1 python3 -B - "$1" <<'PYEOF'
 import sys, os
 sys.path.insert(0, os.path.join(os.environ["CORE"]))
 from grounding_gate_v3 import gate
