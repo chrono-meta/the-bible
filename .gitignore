@@ -3,4 +3,13 @@ __pycache__/
 core/visitors.json
 # Terminal-stage (provisional, ungraduated) skills — local only, not published.
 # Graduate via the FH 6-item creation gate before tracking.
-.claude/
+# NOTE: `.claude/*` (glob), NOT `.claude/` (directory pattern) — git cannot re-include anything
+# inside a directory excluded via the recursive form (verified: `git check-ignore` still matched
+# `.claude/capabilities/x` against a plain `!.claude/capabilities/` negation under the old rule).
+# The glob form still excludes every top-level entry individually, so this closes exactly as
+# tightly, but leaves the negation below actually reachable.
+.claude/*
+# Exception: a node identity/capability declaration is NOT a terminal skill — it is a
+# machine-readable claim about what this repo IS and WILL NOT do (FH capability_composition_contract.md
+# §ⓒ), not a provisional prose skill the 6-item gate is meant to hold back. Track it.
+!.claude/capabilities/

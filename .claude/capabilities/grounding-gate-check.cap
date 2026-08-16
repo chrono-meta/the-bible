@@ -1,0 +1,24 @@
+# the-bible 가 **자기 능력을 스스로 선언한다**.
+# 2026-08-16 첫 시도(gate_cli.py, stdin) — FH 등록 바가 argv로만 캘리브레이션해서 두 arm이 모두
+# 빈 입력으로 돌아 같은 코드를 반환("bar cannot express it", capability_composition_contract.md §ⓒ.4).
+# 이 파일은 그 자리를 argv 진입점(bin/check_capability.sh)으로 다시 밟은 재시도다.
+# 질문: 기계적 그라운딩 게이트가 위기신호를 정확히 차단하고, 안전한 성찰은 정확히 통과시키는가.
+id: the-bible:grounding-gate-check
+summary: mechanical safety-gate discrimination check — does grounding_gate_v3.gate correctly BLOCK a known-unsafe turn and PASS a known-safe one
+tags: safety-gate crisis-detection grounding llm-safety scripture-relay
+entry: bash bin/check_capability.sh
+requires_cwd: SELF
+verdict_channel: exit
+verdict_enum: 0=PASS 1=BLOCKED 3=NO_TARGET 10=HARNESS_ERROR
+approval: auto
+reversibility: reversible
+residency: operator-private
+degrade: fail-closed
+tier_floor: none
+writes: read-only
+judge: mechanical
+verdict_binding: BLOCKED NO_TARGET HARNESS_ERROR
+calibration_positive_args: --known-positive
+calibration_positive_expect: BLOCKED
+calibration_negative_args: --known-negative
+calibration_negative_expect: PASS
