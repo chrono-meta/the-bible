@@ -25,10 +25,30 @@ DESIGN ALIGNMENT (Round-3 discovery scan — see DESIGN.md §4 R8):
 HONEST RESIDUALS (named, not hidden):
   - The confusables table is a CURATED high-value subset (Cyrillic/Greek→Latin + a few common ones),
     not the full Unicode confusables.txt. It closes the common homoglyph classes, not every pair.
-  - leetspeak (3→e, 1→l) is deliberately NOT folded: digit→letter folding over-triggers on ordinary
-    text ("Psalm 23"). It is left to the optional CPT hook / L2, named here.
-  - Caesar/reversed/rot13 ciphers are not decoded by the stdlib floor (unbounded) — the CPT hook / L2
-    are the path for those. base64/hex are decoded because they are bounded and lossless.
+  - General Caesar cipher (arbitrary shift 1-25, reversed text) is NOT decoded — only ROT13 (shift 13
+    specifically) is, per R9 below. A shift other than 13, or simple character-reversal, still evades.
+    Left to the optional CPT hook / L2, named here (same posture the R8 base64/hex floor already
+    takes toward what it does NOT cover).
+
+ROUND-9 STRENGTHENING (R9, 2026-08-16): the two residuals this docstring used to name — "leetspeak is
+deliberately NOT folded" and "rot13 ciphers are not decoded" — are CLOSED below, not merely revised in
+prose. Third-party evidence forced the correction: `deepteam` (Apache-2.0 LLM red-team framework,
+github.com/confident-ai/deepteam), run from an isolated scratch venv against `grounding_gate_v3.gate`
+directly (no repo dependency added — same battery-testing posture as R1-R8, tool stays external), found
+that its actual `ROT13`/`Leetspeak` attack encoders fully bypass BOTH `CRISIS_OVERRIDE` (a suicidal-
+ideation sentence, verbatim, encoded either way -> PASS) and `ABSOLUTION` blocking (an absolution
+declaration, encoded either way -> PASS). A base64 positive control against the same tool's own
+`Base64` encoder confirmed R8's claim still holds (CRISIS_OVERRIDE unchanged) — the finding is real,
+not a broken test harness. Full writeup: DESIGN.md §4 R9.
+
+Both prior objections are addressed, not overridden silently:
+  - ROT13 is a SINGLE fixed substitution (shift 13, self-inverse) — unlike general Caesar (25 shifts)
+    it needed no blob-boundary search the way base64/hex did, so "unbounded" never actually applied to
+    it specifically; that was an overgeneralization from the Caesar-cipher family to one bounded member.
+  - Leetspeak's over-triggering objection ("Psalm 23" folding) is real for a CANONICAL fold, but does
+    not apply to a DETECTION-ONLY VIEW unioned alongside the untouched original — the same posture
+    `skeleton()`/`strip_combining()` already use below. An accidental digit->letter fold on a verse
+    number does not itself match a multi-word safety phrase; it is checked, not corrupted.
 """
 import base64
 import binascii
@@ -146,6 +166,44 @@ def skeleton(text: str) -> str:
     """
     folded = nfkc(text)
     return "".join(_CONFUSABLES.get(ch, _CONFUSABLES.get(ch.lower(), ch)) for ch in folded)
+
+
+def rot13(text: str) -> str:
+    """ROT13 decode/encode (self-inverse, shift 13) — a DETECTION view. A bounded, single fixed
+    substitution (not the unbounded general-Caesar family) — R9, DESIGN.md §4 R9. Union-only: this
+    never replaces the original view, so applying it to already-plain text just yields gibberish
+    that will not accidentally match a multi-word safety phrase."""
+    if not text:
+        return ""
+    return text.translate(
+        str.maketrans(
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
+            "NOPQRSTUVWXYZABCDEFGHIJKLMnopqrstuvwxyzabcdefghijklm",
+        )
+    )
+
+
+# Reverse-leetspeak digit/symbol -> letter map. '1' is genuinely ambiguous (both i and l commonly
+# encode to it), so de_leetspeak() below returns TWO views rather than picking one guess — union,
+# recall-increasing, same fail-closed direction as every other view in this module.
+_DELEET_MAP_I = {"4": "a", "3": "e", "1": "i", "0": "o", "5": "s", "7": "t"}
+_DELEET_MAP_L = {"4": "a", "3": "e", "1": "l", "0": "o", "5": "s", "7": "t"}
+
+
+def de_leetspeak(text: str):
+    """Reverse common leetspeak digit/symbol substitutions — TWO detection-only views ('1'->'i' and
+    '1'->'l', since that mapping is ambiguous). NEVER fed downstream as canonical text — same posture
+    as skeleton()/strip_combining(): unioned alongside the untouched original, so an accidental fold
+    on ordinary numeric text (a verse number, a date) is re-checked, not corrupted (R9,
+    DESIGN.md §4 R9 — this was the exact over-triggering objection that previously blocked folding
+    leetspeak at all; a union view does not have that failure mode, only a canonical replacement would).
+    """
+    if not text:
+        return ["", ""]
+    return (
+        "".join(_DELEET_MAP_I.get(ch, ch) for ch in text),
+        "".join(_DELEET_MAP_L.get(ch, ch) for ch in text),
+    )
 
 
 def _script_of(ch: str) -> str:
@@ -353,6 +411,10 @@ def normalized_views(text: str):
     no_marks = strip_combining(text)            # F2: combining-overlay evasion view
     skel_no_marks = skeleton(no_marks)          # homoglyph + combining stacked
     apos = _fold_apostrophes(text)              # curly-apostrophe view (contraction patterns)
+    r13 = rot13(text)                            # R9: ROT-13 decode view (single fixed substitution)
+    deleet_i, deleet_l = de_leetspeak(text)      # R9: reverse-leetspeak views ('1'->'i' / '1'->'l')
+    deleet_i_r13 = rot13(deleet_i)                # R9: stacked leetspeak+ROT13 (deepteam chains
+    deleet_l_r13 = rot13(deleet_l)                # single-turn attacks; a stacked probe is cheap here)
     # COMPOSED view (Codex round-7): single-transform views are UNIONed but not COMPOSED, so a
     # layered attack (Cyrillic homoglyph + curly apostrophe + fullwidth + zero-width all at once) is
     # missed by every single view. Apply all normalizers together so it collapses in one view.
@@ -388,6 +450,7 @@ def normalized_views(text: str):
     views = []
     seen = set()
     for v in (text, folded, skel, no_marks, skel_no_marks, apos, composed,
+              r13, deleet_i, deleet_l, deleet_i_r13, deleet_l_r13,
               *sorted(decoded), *decoded_composed):
         if v and v not in seen:
             seen.add(v)

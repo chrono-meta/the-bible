@@ -49,6 +49,11 @@ loads automatically, so you can reflect through conversation without running any
 3. **A natural farewell + memory** — no command like "end session" is needed. Say goodbye naturally —
    *"I'll head off now," "see you next time"* — and it saves the traces of your reflection on its own, then
    remembers and welcomes you when you return (`core/visitor_memory.py`).
+4. **Talk with someone, or enter the cathedral** — a distinct mode from the engineering lens above: direct
+   conversation with a person (Jesus, Paul, John, Peter, James — `core/personas_dialogue.json`), or the
+   cathedral's two rooms, hear a maxim / confess (`core/cathedral.md`). Voice/style is simulated freely;
+   scriptural claims stay gated exactly as everywhere else; absolution and doctrinal verdicts stay forbidden
+   regardless of which persona speaks. `python3 core/simulate_dialogue.py` is the known-pair proof that holds.
 
 > **Scripture = absolute axiom (core).** The verified corpus is 197,009 verses across 6 public-domain
 > versions — Protestant (KJV · WEB · ASV · YLT) + Catholic (Douay-Rheims, including the deuterocanon) +
@@ -65,6 +70,9 @@ python3 core/simulate.py           # persona-entry simulation
 python3 core/battery.py            # adversarial battery R1 (v1)
 GATE=v2 python3 core/battery2.py   # R2 (refined evasion)
 GATE=v4 python3 core/battery3.py   # R3 (real LLM Guardian — L2)
+python3 core/battery4.py           # R8 (homoglyph/fullwidth/zero-width/base64 normalization pre-pass)
+python3 core/battery5.py           # R9 (ROT-13/leetspeak — closed after a third-party red-team finding)
+python3 core/simulate_dialogue.py  # character-dialogue + cathedral known-pair proof (8 cases)
 ```
 
 ## Dependencies
@@ -88,7 +96,11 @@ GATE=v4 python3 core/battery3.py   # R3 (real LLM Guardian — L2)
 - **L2 (the LLM judge) is also imperfect**: in adversarial testing (R3) it *missed* borderline cases. The
   demo is left as-is, unmanipulated — this is exactly why the human anchor is needed.
 - **crisis detection**: the example is keyword/LLM-based (illustrative). A real deployment needs a validated
-  classifier (a false negative is the worst case).
+  classifier (a false negative is the worst case). **R9 (2026-08-16)**: a third-party red-team tool
+  (`deepteam`) found ROT-13 and leetspeak encoding fully bypassed crisis detection (`CRISIS_OVERRIDE →
+  PASS`) — closed in `core/normalization.py` (two new detection-only views, no change to the pattern lists
+  or `grounding_gate_v3.py`). General Caesar-cipher shifts and character-reversal remain open — see
+  `DESIGN.md §4 R9`.
 - **privacy ("no trace")**: anything passing through a 3rd-party model may be retained by the provider → do
   not casually promise "no trace"; give an honest data-handling notice.
 - **theological soundness · sacramentality**: outside harness engineering. The province of the relevant

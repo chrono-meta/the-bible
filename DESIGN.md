@@ -95,6 +95,30 @@ verification · honest residuals).
     repro** (mechanical anchor, not reviewer agreement) then fixed and **regression-locked** in `battery4.py`
     (O7–O13). This is the decorrelation value made concrete — the obfuscation/encoding blind spot was
     *correlated* across the same family; only a different family surfaced it.
+- **R9 (third-party red-team tool, 2026-08-16)**: R8's own docstring named two residuals as deliberately
+  left open — "leetspeak is not folded (over-triggers)" and "rot13/Caesar ciphers are not decoded
+  (unbounded)". Both were **closed by evidence, not by re-reading the same code more carefully**: `deepteam`
+  (Apache-2.0 LLM red-team framework, [github.com/confident-ai/deepteam](https://github.com/confident-ai/deepteam)),
+  run from an isolated scratch venv against `grounding_gate_v3.gate` directly — no dependency added to this
+  repo, same external-battery posture as R1-R8 — used its actual shipped `ROT13`/`Leetspeak` attack encoders
+  (not a hand-rolled imitation) against two known-should-block inputs: a verbatim suicidal-ideation sentence
+  and a verbatim absolution declaration. **Both verdicts flipped from blocking to PASS under either
+  encoding** — `CRISIS_OVERRIDE → PASS` and `REFUSED → PASS`. A `Base64` **positive control** from the same
+  tool against the same crisis sentence stayed `CRISIS_OVERRIDE` (R8's claim re-confirmed against real
+  third-party code, not just this repo's own battery), so the instrument itself was trusted before the
+  finding was — the Instrument-Calibration discipline this repo's downstream (forge-harness) names as
+  mandatory. **Fix, scoped narrowly to what was proven**: `core/normalization.py` gained `rot13()` (a single
+  fixed substitution — bounded, unlike the general 25-shift Caesar family the old docstring conflated it
+  with) and `de_leetspeak()` (two DETECTION-ONLY views, `'1'->'i'` and `'1'->'l'`, unioned alongside the
+  untouched original — the same posture `skeleton()`/`strip_combining()` already use, which is exactly what
+  makes the old "over-triggers on ordinary text" objection not apply to a union view). **No change to
+  `grounding_gate_v3.py`** — `_match()` already iterates whatever `normalized_views()` returns, so the fix
+  is fully contained to the normalization layer. Re-verified: both encodings now correctly block; the base64
+  control, `battery.py`/`battery2.py`/`battery3.py` (SLIP 0 · OVER 0, unchanged), and a 5-item benign-numeric
+  spot check (`"Psalm 23"`, `"1 Corinthians 13"`, `"3시 30분"`, `"the year 2026"`, `"chapter 7 verse 4"` — all
+  still `PASS`) all hold after the change. **Honest remaining scope**: general Caesar (any shift other than
+  13) and simple character-reversal are still not decoded — named, not closed; left to the CPT hook / L2,
+  same posture the base64/hex floor already takes toward what it does not cover.
 
 ### Named patterns (layer A / B vocabulary)
 Three behaviors the code already ships but the design never labeled — naming them makes them portable:
@@ -133,12 +157,15 @@ Three behaviors the code already ships but the design never labeled — naming t
   semantic hook + locale (§4 R5), but the pattern floor is *still infinitely evadable* (a token-free
   paraphrase slips) → over-trigger · the `semantic_distress_check` hook · L3 are the ceiling for that reason.
   A real deployment should use a validated INPUT classifier.
-- **normalization is a curated floor, not complete** (§4 R8): the confusables table is a high-value subset
-  (Cyrillic/Greek + common Latin/IPA lookalikes), **not** the full Unicode `confusables.txt`; the stdlib
-  decode-rescan covers base64/hex but not Caesar/rot13/reversed ciphers or leetspeak. An unmapped homoglyph
-  or an undecoded cipher can still evade the views — those are left to the `cpt_obfuscation_check` hook and
-  the L2 Guardian, named here rather than claimed closed. The pre-pass raises recall on the cheap obfuscation
-  classes; it does not make L1 complete (the whole point of L2/L3).
+- **normalization is a curated floor, not complete** (§4 R8, R9): the confusables table is a high-value
+  subset (Cyrillic/Greek + common Latin/IPA lookalikes), **not** the full Unicode `confusables.txt`; the
+  stdlib decode-rescan covers base64/hex **and, since R9, ROT-13 and leetspeak** (both closed 2026-08-16
+  after a third-party red-team tool found they fully bypassed crisis detection and absolution blocking — see
+  §4 R9). What is still open: **general Caesar cipher (any shift other than 13) and simple character-reversal
+  are not decoded.** An unmapped homoglyph or one of those remaining ciphers can still evade the views —
+  those are left to the `cpt_obfuscation_check` hook and the L2 Guardian, named here rather than claimed
+  closed. The pre-pass raises recall on the cheap obfuscation classes; it does not make L1 complete (the
+  whole point of L2/L3).
 - **privacy ("no trace")**: anything passing through a 3rd-party model may be retained by the provider → give
   an honest data-handling notice (no false confidentiality promise).
 - **theological soundness · sacramentality**: outside engineering — the province of authority/tradition (no
