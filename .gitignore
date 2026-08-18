@@ -13,3 +13,9 @@ core/visitors.json
 # machine-readable claim about what this repo IS and WILL NOT do (FH capability_composition_contract.md
 # §ⓒ), not a provisional prose skill the 6-item gate is meant to hold back. Track it.
 !.claude/capabilities/
+
+# 위성 — 로컬 전용(운영자 리터럴·웹권한). 공개 표면에 안 올린다
+.claude/settings.local.json
+.claude/rules/.public-surface-patterns
+.claude/rules/.public-surface-patterns.defaults
+signals/logs/
