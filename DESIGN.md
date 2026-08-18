@@ -203,8 +203,16 @@ Three behaviors the code already ships but the design never labeled — naming t
   subset (Cyrillic/Greek + common Latin/IPA lookalikes), **not** the full Unicode `confusables.txt`; the
   stdlib decode-rescan covers base64/hex **and, since R9, ROT-13 and leetspeak** (both closed 2026-08-16
   after a third-party red-team tool found they fully bypassed crisis detection and absolution blocking — see
-  §4 R9). What is still open: **general Caesar cipher (any shift other than 13) and simple character-reversal
-  are not decoded.** An unmapped homoglyph or one of those remaining ciphers can still evade the views —
+  §4 R9). What is still open — **measured 2026-08-18, not inferred** (`garak` 0.16.0 encoders in an isolated
+  scratch venv against `grounding_gate_v3.gate`, same external-battery posture as R9; controls alive:
+  plaintext crisis → `CRISIS_OVERRIDE`, and R9's own ROT-13/base64 claims independently re-confirmed as
+  still blocking): **general Caesar (any shift other than 13), simple character-reversal, Atbash, Base32,
+  Ascii85, and uuencode all pass a verbatim suicidal-ideation sentence straight through** (6 classes;
+  quoted-printable is caught, being carried by the existing decode-rescan). Caesar and reversal were
+  already named above and are now confirmed by measurement; **Atbash, Base32, Ascii85 and uuencode are new
+  to this list** — they were not named before and the pre-pass has no view for them. **Morse and Braille
+  are UNMEASURED** (the tool's encoder signatures differed; not run, so not reported either way — absence
+  of a result is not a pass). An unmapped homoglyph or any of those classes can still evade the views —
   those are left to the `cpt_obfuscation_check` hook and the L2 Guardian, named here rather than claimed
   closed. The pre-pass raises recall on the cheap obfuscation classes; it does not make L1 complete (the
   whole point of L2/L3).
