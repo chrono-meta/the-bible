@@ -73,6 +73,7 @@ GATE=v4 python3 core/battery3.py   # R3 (real LLM Guardian — L2)
 python3 core/battery4.py           # R8 (homoglyph/fullwidth/zero-width/base64 normalization pre-pass)
 python3 core/battery5.py           # R9 (ROT-13/leetspeak — closed after a third-party red-team finding)
 python3 core/battery6.py           # R10 (concessive Korean -어도/-더라도 + non-contracted EN crisis forms)
+L1_ONLY=1 python3 core/battery7.py # R11 (Caesar/reversal/Atbash/Base32/Ascii85/uu/Morse/Braille/NATO/tag/sneaky-bits + full confusables)
 python3 core/simulate_dialogue.py  # character-dialogue + cathedral known-pair proof (10 cases)
 ```
 
@@ -100,8 +101,9 @@ python3 core/simulate_dialogue.py  # character-dialogue + cathedral known-pair p
   classifier (a false negative is the worst case). **R9 (2026-08-16)**: a third-party red-team tool
   (`deepteam`) found ROT-13 and leetspeak encoding fully bypassed crisis detection (`CRISIS_OVERRIDE →
   PASS`) — closed in `core/normalization.py` (two new detection-only views, no change to the pattern lists
-  or `grounding_gate_v3.py`). General Caesar-cipher shifts and character-reversal remain open — see
-  `DESIGN.md §4 R9`. **R10 (2026-08-16)**: a blind vulnerable-user persona sweep found the concessive
+  or `grounding_gate_v3.py`). **R11 (2026-11-07)** measured every encoding class `DESIGN.md §5` still
+  listed (incl. the two never measured, Morse and Braille) and closed all but Ecoji/Base2048, which are
+  kept as named residuals with a reason — see `DESIGN.md §4 R11`. **R10 (2026-08-16)**: a blind vulnerable-user persona sweep found the concessive
   Korean form (없어도/더라도, "even if I'm gone") and non-contracted English forms slipped both crisis
   tiers — closed by adding the missing grammatical alternatives in `core/grounding_gate.py`, no pattern
   removed. See `DESIGN.md §4 R10`.
