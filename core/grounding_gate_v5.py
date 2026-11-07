@@ -30,6 +30,7 @@ can never be the only line. Coded-idiom / code-switched distress that carries no
 assigned to L2/L3 (the pattern floor structurally cannot reach it) — named, not silently claimed closed.
 """
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -41,13 +42,38 @@ from grounding_gate import scripture_grounded, crisis_response, crisis_checkin, 
 # Pattern sets re-used from v3 (single source of truth — v5 adds no new patterns, only new VIEWS).
 from grounding_gate_v3 import (  # noqa: E402
     SELF_HARM_3, CHECKIN_3, HARM_OTHERS_3, CONFIDENTIAL_REQ_3, ABSOLUTION_3, RISKY_ACTION_3, _match,
+    _strip,
 )
 from grounding_gate_v2 import CONFIDENTIAL_LEAK, OUT_OF_SCOPE, ADJUDICATION  # noqa: E402
 
 
+def _inner_union(views) -> list:
+    """Distinct normalized views-of-views (what v3._match would scan per outer view), deduplicated.
+    R11: with ~40 views per text the per-outer-view re-scan re-matched the same strings hundreds of
+    times (a Caesar shift of a shift is just another shift); the union is identical, scanned once."""
+    seen, out = set(), []
+    for v in views:
+        try:
+            inner, _ = norm.normalized_views(v)
+        except Exception:
+            inner = [v or ""]          # same fallback as v3._match
+        for iv in inner:
+            if iv not in seen:
+                seen.add(iv)
+                out.append(iv)
+    return out
+
+
 def _match_any_view(patterns, views) -> bool:
-    """True if any normalized view of the text trips any pattern (union over views)."""
-    return any(_match(patterns, v) for v in views)
+    """True if any normalized view of the text trips any pattern (union over views).
+    Equivalent to any(_match(patterns, v) for v in views) — v3._match is "any pattern, over every
+    normalized view of v, raw or whitespace-stripped" — with the views-of-views deduplicated (R11)."""
+    for iv in _inner_union(views):
+        ivs = _strip(iv)
+        for p in patterns:
+            if re.search(p, iv, re.I) or re.search(p, ivs, re.I):
+                return True
+    return False
 
 
 def gate(user_input: str, candidate_output: str, citations: list, locale=None) -> dict:

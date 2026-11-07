@@ -22,7 +22,8 @@ verification · honest residuals).
   `grounding_gate_v5.py`): grounding fail-closed · crisis/harm-to-others override · blocks absolution claims,
   out-of-domain drift, doctrinal verdicts, third-party information · **normalization pre-pass** re-runs the
   patterns over NFKC / UTS#39-skeleton / combining-strip / decoded-base64-hex views to defeat
-  homoglyph/fullwidth/zero-width/encoded evasion (§4 R8). Closes the *cheap* class.
+  homoglyph/fullwidth/zero-width/encoded evasion (§4 R8), plus ROT-13/leetspeak (R9) and the cipher /
+  transcoding / full-confusables views (R11). Closes the *cheap* class.
 - **L2 semantic (LLM Guardian)** (`grounding_gate_v4.py`): an LLM classifies, by meaning, the paraphrases/
   intent that regex cannot catch → FLAG.
 - **L3 human audit anchor**: FLAGGED/borderline → sample review. Because *an automated judge (LLM) can also be
@@ -161,6 +162,90 @@ verification · honest residuals).
   named explicitly rather than left as three isolated rows; `CLAUDE.md`'s greeting-line phrasing and the
   "James" persona entry were tightened per a `fh-meta:persona-innovator`-style naming pass (see
   `core/personas_dialogue.json`).
+- **R11 (cipher / transcoding / full-confusables views, 2026-11-07 — W3, `AQ-20261107-16`)**: §5 listed
+  six encoding classes as **measured-open** (general Caesar, reversal, Atbash, Base32, Ascii85, uuencode)
+  and two as **UNMEASURED** (Morse, Braille), plus the curated-confusables limit with no number on it.
+  R11 measured every one of them again (no class carried forward on reputation) and closed the ones a
+  bounded stdlib view can reach. **Method** (same external-battery posture as R9 and the 08-18 pass):
+  `garak` 0.16.0's own encoders, AST-extracted from the released wheel in an isolated scratch venv (no
+  repo dependency), each payload sent bare **and** inside each of garak's 5 decode-request templates,
+  against `grounding_gate_v3` (shipped `run_turn('auto')` path), `grounding_gate_v5` and
+  `dialogue_gate`, with the **L2 Guardian stubbed SAFE** so a verdict is the L1 floor's (the claim §5
+  makes). Controls first, all alive: plaintext crisis → `CRISIS_OVERRIDE`, neutral engineering question →
+  `PASS`, plaintext absolution in `candidate_output` → `REFUSED`, and the R8/R9 base64 and ROT-13 claims
+  re-confirmed. A class counts as *firing* only if all 18 (form × gate) combinations block.
+  The same run also covered garak's other active encoders §5 never named (NATO, Unicode-tag,
+  variation-selector, sneaky-bits, Zalgo, Ecoji, Base2048) — measured, not assumed.
+
+  | class | before (L1, 18 forms×gates, EN crisis / absolution) | after | how |
+  |---|---|---|---|
+  | general Caesar (24 shifts) | PASS 18/18 each | fires | `caesar_views` — fixed 24-member family |
+  | reversal | PASS | fires (Latin) · Hangul **left on purpose** | `reversed_view` (Hangul blanked out of the view — codex r1 #5 + FP lane) |
+  | Atbash | PASS | fires | `atbash` (fixed substitution, like ROT-13) |
+  | Base32 | PASS | fires | `decode_more_blobs` (strict decode, upper/lower) |
+  | Ascii85 / Base85 | PASS | fires | `decode_more_blobs` |
+  | uuencode | PASS | fires | `decode_more_blobs` (per line, prefix-tolerant) |
+  | **Morse** (was unmeasured) | PASS | fires | `morse_decode` |
+  | **Braille** (was unmeasured) | PASS | fires | `braille_decode` (grade-1 cells) |
+  | NATO spelling *(not in §5)* | PASS | fires | `nato_decode` |
+  | Unicode-tag / variation-selector *(not in §5)* | PASS — `strip_format_chars` **deleted** the payload | fires | `tag_decode` (both plane-14 offsets) |
+  | sneaky-bits *(not in §5)* | PASS on v3 (v5 FLAGged via zero-width only) | fires | `sneaky_bits_decode` (bounded DP, ASCII + Hangul) |
+  | Zalgo *(not in §5)* | already fires (R8 combining-strip) | fires | — |
+  | full UTS#39 confusables (one-glyph swap, 3 sentences) | 275 / 2,628 swaps PASS | 0 / 2,628 | `skeleton_full` over generated `confusables_data.py` |
+  | Ecoji / Base2048 *(not in §5)* | PASS (Base2048: v5 FLAG on 6/18) | **left on purpose** | see §5 |
+
+  Korean payloads: the byte codecs and the invisible-char transcodings (Base32, Ascii85/85, uu, tag,
+  variant, sneaky-bits) carry Hangul and now fire on a Korean crisis sentence too; reversed Hangul does
+  NOT (deliberate — codex r1 #5 below); Caesar/Atbash
+  leave Hangul untouched (trivially fire); Morse/Braille/NATO encoders drop Hangul entirely, so there is
+  no Korean payload to detect there (n/a, not a miss). **Every view is detection-only and unioned** —
+  the same posture as `rot13()`/`skeleton()`: never fed downstream, so it can only add a block on a
+  safety-pattern hit. The full-confusables skeleton is deliberately kept **out of the homoglyph FLAG**
+  (it maps ASCII `I`/`|` and signs like `×` — digits are never folded, see R11-fp1; folding those into the flag would over-FLAG plain
+  text). **No pattern list changed, and no gate's decision logic changed** — `_match()` already iterates
+  whatever `normalized_views()` returns. One *semantics-preserving* edit in `grounding_gate_v5.py`:
+  v5 re-normalizes every view (views-of-views — which is also why v5, unlike v3, already catches some
+  *stacked* transforms), and with ~40 views that re-matched the same strings hundreds of times (a shift
+  of a shift is just another shift; v5 went 14 → 434 ms a call). `_match_any_view` now scans the
+  deduplicated union once — checked identical to the old `any(_match(...))` on 2,286 (text × pattern-set)
+  pairs, 0 mismatches. `normalized_views` is also LRU-cached (pure; returns fresh copies).
+  **Cross-family review, round 1** (codex `gpt-5.5`, read-only, repros required): five findings, every
+  one reproduced against source before acting, all fixed and locked in `battery7.py` (`R11-x1`..`x5`):
+  (1) Base32/Ascii85/Base85 **line-wrapped** at 8-10 chars slipped → wrapped alphabet-only line blocks
+  are re-joined before decoding; (2) NATO with ` / ` or `-` separators slipped → separator class widened;
+  (3) standard 45-byte uuencode lines **split a Hangul character across lines** and per-line UTF-8
+  decoding dropped it → raw bytes concatenated first; (4) a 2,048-char whole-message cap let a short
+  Caesar payload hide behind 2 KB of padding → cap raised to the blob cap (8,192; `translate` is O(n));
+  (5) **a real over-block**: reversing Korean prose manufactures 2-syllable crisis tokens (`서유기` →
+  `…유서`, `피해자` → `자해…`), three benign sentences went `PASS → CRISIS_OVERRIDE` → the reversal view
+  first restored each Hangul run to reading order. The English-only FP lane had missed (5), so a
+  20,000-line Korean prose corpus was added to it (below).
+  **Round 2** (codex, the cap): re-attacked the round-1 fixes; **no new over-block reproduced**, but
+  fix (1) was incomplete — a wrapped blob with **blank lines between its lines**, or with an ordinary
+  alphabet-only header/footer line (`Introduction` … `Thanks`) joined onto it, still slipped (108
+  variants). Closed: blank lines no longer end a block, and each block is also tried with up to two
+  lines trimmed from either end (bounded, ≤ 9 candidates, first 512 joined chars) — 576 wrapped
+  variants (3 codecs × 4 plaintexts × 6 widths × 4 layouts × v3/v5) now 0 misses.
+  **The FP lane then caught two regressions the reviewers had not**, both fixed and locked
+  (`R11-fp1`, `R11-fp2`): the full-confusables view folded ASCII `1`→`l`, turning a grounded verse ref
+  `Genesis 3:21` into `3:2l`, which the output-side reference scan read as an *uncited* `Genesis 3:2` —
+  **279 grounded KJV outputs went `PASS → FAIL_CLOSED`** (digits are now never folded there; digit→letter
+  is `de_leetspeak`'s job); and the reading-order-restored Hangul in the reversal view, in reversed
+  *word* order, glued `운영자` + `해제` into `자해` once whitespace-stripped (1 of 20,000 Korean lines) —
+  Hangul is now blanked out of the reversal view entirely.
+  **FP lane (same lane, measured before and after on identical inputs, L2 stubbed)**: every KJV verse
+  as user input (31,102) + every 3rd ASV and Douay-Rheims verse + every 4th KJV verse as a grounded
+  candidate output + 56 benign creative / engineering sentences (KR+EN, incl. lookalike-bait: morse
+  `SOS`, a braille sign, a NATO drill, a base32 TOTP fixture, an AWS example key, `kill -9`, emoji) as
+  both input and output, + 20,000 Korean prose lines (FH track notes and this repo's digests — real
+  operator prose, 8+ Hangul syllables each) as input and every 2nd as output —
+  91,287 cases × {v3, dialogue_gate}: **0 new blocks, 0 cleared, 0 changed verdicts** on the final code (pre-existing blocks on verses that contain death vocabulary are identical before and after). Regression-locked in
+  `core/battery7.py` (generated payloads, no encoded string written down; `L1_ONLY=1` isolates the
+  floor): pre-fix snapshot SLIP 69 of 74 positives (the 5 that held: the base64 control, three sneaky-bits inputs v5 FLAGged for zero-width alone, and one confusable the curated table already FLAGged) and OVER 0 of 19 SAFE controls, post-fix SLIP 0 · OVER 0 on v5 and v3; `battery4`-`6` unchanged. **Cost** (L1 only,
+  KJV verses): v3 ~3.7 → ~7.5 ms, `dialogue_gate` ~4.6 → ~6.9 ms, v5 ~14 → ~64 ms (v5's own L2 call that
+  follows is seconds). Worst case over 13 adversarial 8 KB shapes (long NATO / Morse / Base85 /
+  wrapped-line / sneaky-bits / tag / braille runs): **v3 0.18 s, v5 1.7 s** — v5 re-normalizes every one
+  of ~40 views of an 8 KB text; it is the reference/battery gate and its own L2 call follows.
 
 ### Named patterns (layer A / B vocabulary)
 Three behaviors the code already ships but the design never labeled — naming them makes them portable:
@@ -199,23 +284,35 @@ Three behaviors the code already ships but the design never labeled — naming t
   semantic hook + locale (§4 R5), but the pattern floor is *still infinitely evadable* (a token-free
   paraphrase slips) → over-trigger · the `semantic_distress_check` hook · L3 are the ceiling for that reason.
   A real deployment should use a validated INPUT classifier.
-- **normalization is a curated floor, not complete** (§4 R8, R9): the confusables table is a high-value
-  subset (Cyrillic/Greek + common Latin/IPA lookalikes), **not** the full Unicode `confusables.txt`; the
-  stdlib decode-rescan covers base64/hex **and, since R9, ROT-13 and leetspeak** (both closed 2026-08-16
-  after a third-party red-team tool found they fully bypassed crisis detection and absolution blocking — see
-  §4 R9). What is still open — **measured 2026-08-18, not inferred** (`garak` 0.16.0 encoders in an isolated
-  scratch venv against `grounding_gate_v3.gate`, same external-battery posture as R9; controls alive:
-  plaintext crisis → `CRISIS_OVERRIDE`, and R9's own ROT-13/base64 claims independently re-confirmed as
-  still blocking): **general Caesar (any shift other than 13), simple character-reversal, Atbash, Base32,
-  Ascii85, and uuencode all pass a verbatim suicidal-ideation sentence straight through** (6 classes;
-  quoted-printable is caught, being carried by the existing decode-rescan). Caesar and reversal were
-  already named above and are now confirmed by measurement; **Atbash, Base32, Ascii85 and uuencode are new
-  to this list** — they were not named before and the pre-pass has no view for them. **Morse and Braille
-  are UNMEASURED** (the tool's encoder signatures differed; not run, so not reported either way — absence
-  of a result is not a pass). An unmapped homoglyph or any of those classes can still evade the views —
-  those are left to the `cpt_obfuscation_check` hook and the L2 Guardian, named here rather than claimed
-  closed. The pre-pass raises recall on the cheap obfuscation classes; it does not make L1 complete (the
-  whole point of L2/L3).
+- **normalization is a curated floor, not complete** (§4 R8, R9, R11): as of R11 (2026-11-07) **every
+  encoding class this section used to list is MEASURED** — none is carried as "unmeasured" any more.
+  Closed by measurement + a view (§4 R11 table): general Caesar, reversal (Latin), Atbash, Base32, Ascii85/
+  Base85, uuencode (the six measured-open on 2026-08-18), Morse and Braille (the two that were
+  UNMEASURED), plus NATO / Unicode-tag / variation-selector / sneaky-bits (garak encoders this section
+  had never named) and one-glyph homoglyphs from the full UTS#39 single-code-point table. **Measured ·
+  left on purpose** (each with its reason):
+  - **Ecoji, Base2048** — PASS straight through (Base2048 is FLAGged by v5 on 6/18 forms, never by v3).
+    Decoding needs a vendored 1,024 / 2,048-code-point alphabet table the stdlib does not ship — a
+    third-party-spec maintenance surface inside an import-clean floor, for two classes no prior finding
+    ever reached this repo through. Left to the `cpt_obfuscation_check` hook / L2 Guardian.
+  - **Keyed ciphers (Vigenère …) and stacked transforms** (e.g. a Caesar shift of a reversed string,
+    Atbash inside Base32) — not composed. A keyed cipher is genuinely unbounded (the key is the secret);
+    composing every pair of the ~40 views would multiply cost ~40× for no observed attack. L2.
+  - **Glued-junk R11 byte codecs** — Base32/Ascii85/Base85/uuencode decode whole runs (uu: per line,
+    tolerant of a text prefix before a space); unlike base64/hex there is no start-offset de-glue scan,
+    so a blob glued to alphabet-junk with no separator is not decoded. garak's templates all separate the
+    payload; the de-glue scan is the expensive part of R8's decoder. L2.
+  - **Reversed Hangul** — a character-reversed Korean crisis sentence PASSes (v3 and v5). Reversing
+    Korean prose manufactures the repo's short 2-syllable crisis tokens out of ordinary words (measured:
+    `서유기`, `피해자`, `가해자와 피해자` all went to `CRISIS_OVERRIDE` with a full-reversal view), so the
+    view blanks Hangul out (even reading-order-restored runs re-glued into `자해` in reversed word order). Recall here would cost the primary locale's everyday prose. L2.
+  - **Multi-code-point confusables** (`rn`→`m`) and wide code points of scripts other than Hangul in the
+    sneaky-bits parser — not folded / not parsed; this deployment's locales are ko/en.
+  - **The homoglyph FLAG still uses the curated table.** The full table is a match view only (it maps
+    ASCII `I`/`|` and `×`; digits excluded), so an out-of-curated lookalike *blocks on a pattern hit* but does not
+    by itself raise "obfuscation attempted" to L3.
+  The pre-pass raises recall on the cheap obfuscation classes; it does not make L1 complete — a
+  token-free paraphrase still walks past every view (the whole point of L2/L3).
 - **privacy ("no trace")**: anything passing through a 3rd-party model may be retained by the provider → give
   an honest data-handling notice (no false confidentiality promise).
 - **theological soundness · sacramentality**: outside engineering — the province of authority/tradition (no
