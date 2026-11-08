@@ -180,7 +180,7 @@ verification · honest residuals).
   | class | before (L1, 18 forms×gates, EN crisis / absolution) | after | how |
   |---|---|---|---|
   | general Caesar (24 shifts) | PASS 18/18 each | fires | `caesar_views` — fixed 24-member family |
-  | reversal | PASS | fires (Latin) · Hangul **left on purpose** | `reversed_view` (Hangul blanked out of the view — codex r1 #5 + FP lane) |
+  | reversal | PASS | fires (Latin) · Hangul **left on purpose** | `reversed_view` (Hangul blanked — codex r1 #5 + FP lane; an R11b signal gate was tried and withdrawn) |
   | Atbash | PASS | fires | `atbash` (fixed substitution, like ROT-13) |
   | Base32 | PASS | fires | `decode_more_blobs` (strict decode, upper/lower) |
   | Ascii85 / Base85 | PASS | fires | `decode_more_blobs` |
@@ -192,7 +192,8 @@ verification · honest residuals).
   | sneaky-bits *(not in §5)* | PASS on v3 (v5 FLAGged via zero-width only) | fires | `sneaky_bits_decode` (bounded DP, ASCII + Hangul) |
   | Zalgo *(not in §5)* | already fires (R8 combining-strip) | fires | — |
   | full UTS#39 confusables (one-glyph swap, 3 sentences) | 275 / 2,628 swaps PASS | 0 / 2,628 | `skeleton_full` over generated `confusables_data.py` |
-  | Ecoji / Base2048 *(not in §5)* | PASS (Base2048: v5 FLAG on 6/18) | **left on purpose** | see §5 |
+  | Ecoji / Base2048 *(not in §5)* | PASS (Base2048: v5 FLAG on 6/18) | fires (**R11b**) | `emoji_codec_decode` over generated `codec_tables.py` |
+  | glued-junk Base32 / Ascii85 / Base85 | PASS | fires (**R11b**) | budgeted de-glue scan in `decode_more_blobs` |
 
   Korean payloads: the byte codecs and the invisible-char transcodings (Base32, Ascii85/85, uu, tag,
   variant, sneaky-bits) carry Hangul and now fire on a Korean crisis sentence too; reversed Hangul does
@@ -247,6 +248,43 @@ verification · honest residuals).
   wrapped-line / sneaky-bits / tag / braille runs): **v3 0.18 s, v5 1.7 s** — v5 re-normalizes every one
   of ~40 views of an 8 KB text; it is the reference/battery gate and its own L2 call follows.
 
+- **R11b (same day, follow-up on the operator's "더 갈 수 있는 부분")** — three of R11's "left on purpose"
+  rows reopened: two closed, one tried and withdrawn, each measured on the same lanes:
+  1. **Ecoji / Base2048** — `core/build_codec_tables.py` writes both alphabets into `core/codec_tables.py`
+     (Ecoji read from its package; Base2048's package is compiled, so its table is *probed* from the encoder
+     and the build refuses to write unless 3,000 random byte strings round-trip through this repo's own
+     decoder). Runtime stays stdlib-only. Now fires on every form × gate, Korean payloads included.
+  2. **Glued-junk Base32 / Ascii85 / Base85** — a budgeted start-offset de-glue scan with end-trim (an
+     Ascii85 group's suffix junk corrupts the whole group). 216 glued variants (3 codecs × 4 plaintexts ×
+     9 prefix/suffix shapes × v3/v5): 0 misses. A shared budget let the Base32 scan of a junk prefix
+     starve the Ascii85 scan — budgets are per codec.
+  3. **Reversed Hangul — tried and withdrawn.** A signal-gated full reversal (reversed Korean starts its
+     words with endings/particles; threshold tuned to 10/10 of the author's probes) added 0 blocks on
+     40,000 real prose lines, but cross-family round 1 reproduced ordinary short sentences it turned into
+     `CRISIS_OVERRIDE` (`피해자 지원 안내`, `서유기 읽는 이야기` — the FP lane's 12-char floor had excluded
+     them) and reversed crisis sentences scoring 0. Kept out; locked as SAFE (`R11b-x5`).
+  **Cross-family review (codex, new PR → new 2-round cap)**, round 1: besides (3), four reproduced
+  fail-opens, all fixed and locked (`R11b-x1`..`x4`): Ecoji/Base2048 **split by spaces or newlines**
+  (runs now tolerate whitespace/VS16 inside); an **alphabet-valid wrapper** before the payload (an emoji,
+  an Armenian word) shifting bit alignment (bounded start-offset scan + loose bit-stream decode);
+  Ascii85/Base85 with **more than 4 suffix junk chars** (a promising last window now tries up to 24 end
+  positions inside the budget); and a 3.9 KB input crossing 1 s on v3 under load — partly pre-existing,
+  R11b amplified it; the decode frontier's seeds are now deduplicated (for plain ASCII they were six
+  identical strings, every decoder ran 6×). **Round 2** (the cap): **no new regression** — ordinary emoji
+  chat, Armenian/Georgian/Cyrillic/Thai/Devanagari samples and 2,100 generated word/emoji permutations
+  have the same verdicts as merged R11, 102 Ecoji/Base2048 variants block, no sub-8 KB input crossed 1 s
+  on v3 (max ≈ 0.44 s). One incomplete fix: an Ascii85 payload followed by `z` junk (`z` is Ascii85's
+  zero-group shortcut, so the whole-window decode *raises*) never reached the end-trim step — alignment
+  is now judged on the window's first 20 chars; 288 suffix-junk variants (2 codecs × 3 plaintexts ×
+  4 junk chars × 6 lengths × v3/v5) 0 misses, locked as `R11b-y1`. Suffix junk longer than 24 chars
+  after an x85 blob is a stated bound (§5).
+  FP lane re-run on the R11b code against the merged-R11 code, same inputs, plus a **held-out** 20,000
+  Korean prose lines never used for tuning — 111,287 cases × {v3, dialogue_gate}: **0 new blocks, 0 cleared, 0 changed verdicts**. `battery7.py` gains 33 R11b cases;
+  on the merged-R11 code 22/28 positives SLIP (5 held only as v5 FLAGs, 1 was already caught by R11's
+  whole-run decode) and 0/5 SAFE over-block; on R11b SLIP 0 · OVER 0 (v5 and v3). Worst case on 17 adversarial 8 KB shapes, measured back-to-back with merged R11 at low load (≈ 6): v3
+  0.18 vs 0.15 s, v5 1.59 vs 1.50 s; codex's 3.9 KB repro on v3 0.29 vs 0.15 s (it crossed 1 s only under
+  load ≈ 25 — absolute times on this shared machine drift with load).
+
 ### Named patterns (layer A / B vocabulary)
 Three behaviors the code already ships but the design never labeled — naming them makes them portable:
 - **Wide-Net Tier** (crisis layer A) — a detection tier tuned to *over-fire on purpose* because a
@@ -288,29 +326,30 @@ Three behaviors the code already ships but the design never labeled — naming t
   encoding class this section used to list is MEASURED** — none is carried as "unmeasured" any more.
   Closed by measurement + a view (§4 R11 table): general Caesar, reversal (Latin), Atbash, Base32, Ascii85/
   Base85, uuencode (the six measured-open on 2026-08-18), Morse and Braille (the two that were
-  UNMEASURED), plus NATO / Unicode-tag / variation-selector / sneaky-bits (garak encoders this section
-  had never named) and one-glyph homoglyphs from the full UTS#39 single-code-point table. **Measured ·
-  left on purpose** (each with its reason):
-  - **Ecoji, Base2048** — PASS straight through (Base2048 is FLAGged by v5 on 6/18 forms, never by v3).
-    Decoding needs a vendored 1,024 / 2,048-code-point alphabet table the stdlib does not ship — a
-    third-party-spec maintenance surface inside an import-clean floor, for two classes no prior finding
-    ever reached this repo through. Left to the `cpt_obfuscation_check` hook / L2 Guardian.
+  UNMEASURED), plus NATO / Unicode-tag / variation-selector / sneaky-bits and — since R11b — Ecoji and
+  Base2048 (garak encoders this section had never named), glued-junk byte codecs, and one-glyph homoglyphs
+  from the full UTS#39 single-code-point table. **Measured · left on purpose** (each with its reason):
   - **Keyed ciphers (Vigenère …) and stacked transforms** (e.g. a Caesar shift of a reversed string,
     Atbash inside Base32) — not composed. A keyed cipher is genuinely unbounded (the key is the secret);
-    composing every pair of the ~40 views would multiply cost ~40× for no observed attack. L2.
-  - **Glued-junk R11 byte codecs** — Base32/Ascii85/Base85/uuencode decode whole runs (uu: per line,
-    tolerant of a text prefix before a space); unlike base64/hex there is no start-offset de-glue scan,
-    so a blob glued to alphabet-junk with no separator is not decoded. garak's templates all separate the
-    payload; the de-glue scan is the expensive part of R8's decoder. L2.
-  - **Reversed Hangul** — a character-reversed Korean crisis sentence PASSes (v3 and v5). Reversing
-    Korean prose manufactures the repo's short 2-syllable crisis tokens out of ordinary words (measured:
-    `서유기`, `피해자`, `가해자와 피해자` all went to `CRISIS_OVERRIDE` with a full-reversal view), so the
-    view blanks Hangul out (even reading-order-restored runs re-glued into `자해` in reversed word order). Recall here would cost the primary locale's everyday prose. L2.
+    composing every pair of the ~40 views would multiply cost ~40× for no observed attack. (v5 re-normalizes
+    each view, so it does catch some 2-step stacks v3 misses.) L2.
+  - **Reversed Hangul** — a character-reversed Korean crisis sentence PASSes (v3 and v5). A full Hangul
+    reversal manufactures the repo's short 2-syllable crisis tokens out of ordinary words (`서유기`,
+    `피해자`), so the reversal view blanks Hangul. R11b tried a signal-gated full reversal (reversed Korean
+    starts its words with endings): 0 new blocks on 40,000 real prose lines, yet cross-family review
+    reproduced short ordinary sentences (`피해자 지원 안내`) it turned into `CRISIS_OVERRIDE` and reversed
+    crisis sentences it scored 0 — **withdrawn**; the signal does not separate the classes. L2.
+  - **R11b de-glue is budgeted.** Base32/Ascii85/Base85 runs that fail whole are scanned from every start
+    offset (384 window decodes per codec per text, runs ≤ 320 chars), with up to 24 chars of x85 suffix
+    junk trimmed; Ecoji/Base2048 runs tolerate ≤ 24 alphabet-valid wrapper chars before the payload. A
+    glued blob beyond those bounds, or behind enough decoy runs to spend the budget, is not decoded. L2.
   - **Multi-code-point confusables** (`rn`→`m`) and wide code points of scripts other than Hangul in the
     sneaky-bits parser — not folded / not parsed; this deployment's locales are ko/en.
   - **The homoglyph FLAG still uses the curated table.** The full table is a match view only (it maps
     ASCII `I`/`|` and `×`; digits excluded), so an out-of-curated lookalike *blocks on a pattern hit* but does not
-    by itself raise "obfuscation attempted" to L3.
+    by itself raise "obfuscation attempted" to L3. The other side of the same table (pre-existing since
+    R8, noticed while building R11b's controls): **plain Cyrillic or Greek prose is FLAGged by v5** (to L3,
+    not blocked) because the curated skeleton folds those scripts. Not changed here.
   The pre-pass raises recall on the cheap obfuscation classes; it does not make L1 complete — a
   token-free paraphrase still walks past every view (the whole point of L2/L3).
 - **privacy ("no trace")**: anything passing through a 3rd-party model may be retained by the provider → give

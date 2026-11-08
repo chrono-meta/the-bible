@@ -27,12 +27,11 @@ HONEST RESIDUALS (named, not hidden) — as of R11 (2026-11-07):
     table (skeleton_full(), R11) is a match view only, so a lookalike outside the curated set blocks on
     a pattern hit but does not by itself raise the obfuscation FLAG. Multi-code-point confusables
     ('rn' -> 'm') are not folded.
-  - Ecoji and Base2048 are NOT decoded (each needs a vendored 1,024 / 2,048-code-point alphabet table
-    the stdlib does not ship). Keyed ciphers (Vigenère etc.) and STACKED transforms (e.g. a Caesar
-    shift of a reversed string) are not composed. The R11 byte codecs (Base32/Ascii85/Base85/uuencode)
-    decode whole runs only — no glued-junk de-glue scan like base64/hex has. All left to the optional
-    CPT hook / L2, named in DESIGN.md §5.
-  (The general-Caesar / reversal residual this block used to name was CLOSED in R11 — see below.)
+  - Keyed ciphers (Vigenère etc.) and STACKED transforms (e.g. a Caesar shift of a reversed string)
+    are not composed. The R11b de-glue scan for Base32/Ascii85/Base85 is budgeted (384 decodes per codec,
+    runs <= 320 chars). Reversed Hangul is not viewed at all (blanked; a signal-gated R11b attempt was
+    withdrawn after review reproduced over-blocks). All left to the optional CPT hook / L2, named in DESIGN.md §5.
+  (General Caesar / reversal were CLOSED in R11; Ecoji / Base2048 / glued byte codecs in R11b — see below.)
 
 ROUND-9 STRENGTHENING (R9, 2026-08-16): the two residuals this docstring used to name — "leetspeak is
 deliberately NOT folded" and "rot13 ciphers are not decoded" — are CLOSED below, not merely revised in
@@ -631,6 +630,144 @@ def sneaky_bits_decode(text: str) -> str:
     return " ".join(words)
 
 
+# --- R11b: Ecoji / Base2048 (alphabets generated into core/codec_tables.py by build_codec_tables.py) ---
+from codec_tables import ECOJI, ECOJI_PAD, ECOJI_PAD4, B2048, B2048_TAIL  # noqa: E402
+
+_ECOJI_IDX = {c: i for i, c in enumerate(ECOJI)}
+_ECOJI_ALL = set(ECOJI) | {ECOJI_PAD} | set(ECOJI_PAD4)
+_B2048_IDX = {c: i for i, c in enumerate(B2048)}
+_B2048_TAIL_IDX = {c: i for i, c in enumerate(B2048_TAIL)}
+_B2048_ALL = set(B2048) | set(B2048_TAIL)
+
+
+def _ecoji_bytes(s: str):
+    """Ecoji v1: 4 emoji -> 5 bytes (10 bits each); '☕' pads, the four PAD4 emoji carry 2 bits in the
+    last slot. Newlines / VS16 inside the run are skipped. None on a malformed group."""
+    cs = [c for c in s if c in _ECOJI_ALL]
+    if not cs:
+        return None
+    out = bytearray()
+    for g in range(0, len(cs), 4):
+        grp = (cs[g:g + 4] + [ECOJI_PAD] * 4)[:4]
+        if grp[0] not in _ECOJI_IDX:
+            return None
+        b = [_ECOJI_IDX.get(c, 0) for c in grp[:3]]
+        c3 = grp[3]
+        b3 = (ECOJI_PAD4.index(c3) << 8) if c3 in ECOJI_PAD4 else _ECOJI_IDX.get(c3, 0)
+        five = [b[0] >> 2, ((b[0] & 3) << 6) | (b[1] >> 4), ((b[1] & 15) << 4) | (b[2] >> 6),
+                ((b[2] & 63) << 2) | (b3 >> 8), b3 & 255]
+        keep = 1 if grp[1] == ECOJI_PAD else 2 if grp[2] == ECOJI_PAD else 3 if c3 == ECOJI_PAD \
+            else 4 if c3 in ECOJI_PAD4 else 5
+        out += bytes(five[:keep])
+    return bytes(out)
+
+
+def _b2048_bytes(s: str):
+    """Base2048 (qntm): 11 bits per char; the final char is either a full char carrying 4-11 bits or one
+    of 8 tail chars carrying 1-3 bits, right-aligned — the bit count follows from the total length."""
+    if not s or any(c not in _B2048_IDX for c in s[:-1]) or s[-1] not in _B2048_ALL:
+        return None
+    base = 11 * (len(s) - 1)
+    if s[-1] in _B2048_TAIL_IDX:
+        k = next((k for k in (1, 2, 3) if (base + k) % 8 == 0), None)
+        v = _B2048_TAIL_IDX[s[-1]]
+    else:
+        k = next((k for k in range(4, 12) if (base + k) % 8 == 0), None)
+        v = _B2048_IDX[s[-1]]
+    if k is None or v >> k:
+        return None
+    acc = 0
+    for c in s[:-1]:
+        acc = (acc << 11) | _B2048_IDX[c]
+    acc = (acc << k) | v
+    return acc.to_bytes((base + k) // 8, "big")
+
+
+def _runs(text: str, alphabet: set, skip: str, min_len: int, cap: int = 2048):
+    """Maximal runs of alphabet chars; chars in `skip` (whitespace, VS16) may occur INSIDE a run and are
+    dropped — codex R11b-r1: a payload split into space-separated groups slipped."""
+    runs, cur = [], []
+    for ch in text[:_MAX_BLOB_IN]:
+        if ch in alphabet:
+            cur.append(ch)
+        elif ch in skip and cur:
+            continue
+        else:
+            if len(cur) >= min_len:
+                runs.append("".join(cur[:cap]))
+            cur = []
+    if len(cur) >= min_len:
+        runs.append("".join(cur[:cap]))
+    return runs[:16]
+
+
+def _bits_to_text(bits: str):
+    s = _printable_only(bytes(int(bits[i:i + 8], 2) for i in range(0, len(bits) - 7, 8)).decode("utf-8", "ignore"))
+    return s if len(s) >= 3 else None
+
+
+def _ecoji_loose(run: str):
+    """Ecoji as a raw 10-bit stream (stop at the first padding emoji) — tolerant of alphabet-valid junk
+    AFTER the payload; the caller supplies the start offset (junk BEFORE it)."""
+    bits = []
+    for c in run:
+        if c in _ECOJI_IDX:
+            bits.append(format(_ECOJI_IDX[c], "010b"))
+        elif c in ECOJI_PAD4:
+            bits.append(format(ECOJI_PAD4.index(c), "02b"))
+            break
+        else:
+            break
+    return _bits_to_text("".join(bits))
+
+
+def _b2048_loose(run: str):
+    """Base2048 as a raw 11-bit stream (tail char = 3 bits, then stop)."""
+    bits = []
+    for c in run:
+        if c in _B2048_IDX:
+            bits.append(format(_B2048_IDX[c], "011b"))
+        else:
+            bits.append(format(_B2048_TAIL_IDX[c], "03b"))
+            break
+    return _bits_to_text("".join(bits))
+
+
+_EMOJI_MAX_START = 24      # alphabet-valid wrapper chars glued before a payload (codex R11b-r1)
+_EMOJI_WIN = 192           # a crisis / absolution payload is short
+
+
+def emoji_codec_decode(text: str) -> list:
+    """Ecoji / Base2048 runs -> decoded text. Whole-run strict decode first; then a bounded start-offset
+    scan with a loose bit-stream decode, so alphabet-valid junk before/after the payload (an emoji, an
+    Armenian word) does not shift it out of alignment. Printable filter as in _b64_try: a benign emoji
+    string / Cyrillic word decodes to noise and is dropped. Bounded: 16 runs x 24 starts x 192 chars."""
+    if not text:
+        return []
+    out = []
+
+    def _add(s):
+        if s and len(s) >= 3 and _printable_ratio(s) >= 0.85 and s not in out:
+            out.append(s)
+
+    for run in _runs(text, _ECOJI_ALL, " \t\n\r\ufe0f", 4):
+        raw = _ecoji_bytes(run)
+        if raw:
+            _add(raw.decode("utf-8", "ignore"))
+        for st in range(min(_EMOJI_MAX_START, len(run) - 3)):
+            _add(_ecoji_loose(run[st:st + _EMOJI_WIN]))
+    for run in _runs(text, _B2048_ALL, " \t\n\r", 3):
+        raw = _b2048_bytes(run)
+        if raw:
+            try:
+                _add(raw.decode("utf-8", "strict"))
+            except UnicodeDecodeError:
+                pass
+        for st in range(min(_EMOJI_MAX_START, len(run) - 2)):
+            _add(_b2048_loose(run[st:st + _EMOJI_WIN]))
+    return out
+
+
 def cipher_views(text: str) -> list:
     """R11 view family: fixed ciphers (Caesar x24, Atbash, reversal) + symbol transcodings (Morse,
     Braille, NATO, Unicode-tag/variant-selector, sneaky-bits). Byte codecs (Base32/Ascii85/Base85/
@@ -751,10 +888,81 @@ def _wrapped_blocks(text: str, alphabet_re: str) -> list:
     return out
 
 
+_R11_DEGLUE_BUDGET = 384    # loose-window decodes per CODEC per decode_more_blobs() call (a shared budget let
+#   the Base32 scan over a junk prefix starve the Ascii85/Base85 scans of the same text)
+_R11_DEGLUE_MAX_RUN = 320   # a glued crisis blob is short; a longer alphabet run is not de-glued (DoS)
+
+
+def _b32_loose(seg):
+    """Loose Base32 window: try PADDED first (a short blob's last group is partial — truncating it to a
+    multiple of 8 dropped the final byte, 'myself' -> 'mysel'), then truncated."""
+    seg = seg.upper()
+    for cand in (seg + "=" * (-len(seg) % 8), seg[: len(seg) // 8 * 8]):
+        if len(cand.rstrip("=")) < 8:
+            continue
+        try:
+            raw = base64.b32decode(cand)
+        except (binascii.Error, ValueError):
+            continue
+        s = _printable_only(raw.decode("utf-8", "ignore"))
+        if len(s) >= 3:
+            return s
+    return None
+
+
+def _x85_loose(seg, dec):
+    """Loose Ascii85/Base85 window: whole window first (both decoders accept a partial final group),
+    then truncated to whole 5-char groups."""
+    for cand in (seg, seg[: len(seg) // 5 * 5]):
+        if len(cand) < 10:
+            continue
+        try:
+            raw = dec(cand.encode("ascii"))
+        except (ValueError, TypeError):
+            continue
+        s = _printable_only(raw.decode("utf-8", "ignore"))
+        if len(s) >= 3:
+            return s
+    return None
+
+
+def _deglue(run, loose, budget):
+    """R11b — the base64/hex de-glue idea for the R11 byte codecs: a run that fails to decode whole may
+    carry a valid blob glued to alphabet-junk (no separator). Scan start offsets, decode a short window
+    loosely (junk tail bytes ignored), keep printable. Bounded by a SHARED budget, not per run."""
+    out = []
+    if len(run) > _R11_DEGLUE_MAX_RUN:
+        return out
+    for start in range(len(run)):
+        win = run[start:start + _DEGLUE_WIN]
+        if budget[0] <= 0 or len(win) < 8:
+            return out
+        budget[0] -= 1
+        d = loose(win)
+        if d:
+            out.append(d)
+        # suffix junk corrupts the last x85 group (codex R11b-r1: 6 junk chars beat a 4-char trim). Only
+        # where this window reaches the run's END and its first 20 chars decode to a printable prefix (a
+        # likely aligned start — judged on the PREFIX, since junk like 'z' can make the whole-window
+        # decode raise, codex R11b-r2) are earlier end positions tried, up to 24 back, inside the budget.
+        probe = loose(win[:20]) if len(win) < _DEGLUE_WIN and budget[0] > 0 else None
+        if probe is not None:
+            budget[0] -= 1
+        if probe and len(probe) >= 10:
+            for trim in range(1, min(25, len(win) - 7)):
+                if budget[0] <= 0:
+                    return out
+                budget[0] -= 1
+                e = loose(win[:-trim])
+                if e:
+                    out.append(e)
+    return out
+
+
 def decode_more_blobs(text: str) -> list:
-    """R11 byte codecs beyond base64/hex: Base32, Ascii85/Base85, uuencode. Whole-run strict decode
-    per candidate (no de-glue scan — a glued-junk variant is a named residual, see DESIGN.md §5).
-    Bounded: candidate length cap + per-input candidate cap."""
+    """R11 byte codecs beyond base64/hex: Base32, Ascii85/Base85, uuencode. Whole-run strict decode per
+    candidate, then (R11b) a budgeted de-glue scan on runs that failed whole. Bounded: candidate length
+    cap, per-input candidate cap, and a per-codec de-glue budget."""
     if not text or len(text) > _MAX_BLOB_IN:
         return []
     out = []
@@ -764,13 +972,21 @@ def decode_more_blobs(text: str) -> list:
             out.append(s[:_MAX_DECODED])
 
     n = 0
+    budgets = {}
+    loose = {_B32_RE: [_b32_loose], _A85_RE: [lambda x: _x85_loose(x, base64.a85decode)],
+             _B85_RE: [lambda x: _x85_loose(x, base64.b85decode)]}
     for rx, fn, alpha in ((_B32_RE, _b32_try, r"[A-Za-z2-7=]"), (_A85_RE, _a85_try, r"[!-uz~<>]"),
                           (_B85_RE, _a85_try, r"[0-9A-Za-z!#$%&()*+\-;<=>?@^_`{|}~]")):
         for m in rx.findall(text) + _wrapped_blocks(text, alpha):
             n += 1
             if n > 64:
                 break
-            _add(fn(m))
+            whole = fn(m)
+            _add(whole)
+            if whole is None and len(m) >= 16:          # R11b de-glue only when the whole run failed
+                for lf in loose[rx]:
+                    for d in _deglue(m.rstrip("=").strip("<~>"), lf, budgets.setdefault(rx, [_R11_DEGLUE_BUDGET])):
+                        _add(d)
     for s in _uu_decode_lines(text):
         _add(s)
     return out
@@ -831,13 +1047,14 @@ def _normalized_views(text: str):
     transcoded = [v for v in (*tag_decode(text), sneaky_bits_decode(text), braille_decode(text),
                               morse_decode(text), nato_decode(text)) if v]
     decoded = set()
-    frontier = [text, folded, skel, no_marks, apos, composed, *transcoded]
+    frontier = list(dict.fromkeys([text, folded, skel, no_marks, apos, composed, *transcoded]))
+    # ^ dedupe (codex R11b-r1 DoS): for plain ASCII the six seeds are IDENTICAL and every decoder ran 6x.
     for _depth in range(3):
         nxt = []
         for s in frontier:
             if len(s) > 4096:   # perf bound (Codex round-10): a hidden SHORT crisis fits in a small
                 continue        # blob; skip decoding huge seeds (a real crisis message is not 8 KB).
-            cands = list(decode_blobs(s)) + decode_more_blobs(s)   # R11: + Base32/Ascii85/Base85/uu
+            cands = list(decode_blobs(s)) + decode_more_blobs(s) + emoji_codec_decode(s)  # R11/R11b
             p = _percent_decode(s)
             if p:
                 cands.append(p)
